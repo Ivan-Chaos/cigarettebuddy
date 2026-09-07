@@ -1,0 +1,52 @@
+{
+  "name": "cigarettebuddy",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "env:init": "node scripts/init-env.mjs",
+    "dev": "concurrently -k -n api,web -c blue,magenta \"pnpm --filter @cigbuddy/api dev\" \"pnpm --filter @cigbuddy/web dev\"",
+    "dev:api": "pnpm --filter @cigbuddy/api dev",
+    "dev:web": "pnpm --filter @cigbuddy/web dev",
+    "build": "pnpm --recursive --filter \"./apps/*\" build",
+    "start": "concurrently -k -n api,web -c blue,magenta \"pnpm --filter @cigbuddy/api start\" \"pnpm --filter @cigbuddy/web start\"",
+    "check": "pnpm --recursive check",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "pnpm --recursive test",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:reset": "docker compose down -v --remove-orphans",
+    "docker:logs": "docker compose logs -f api web",
+    "docker:migrate": "docker compose run --rm migrate",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d postgres",
+    "db:generate": "pnpm --filter @cigbuddy/db generate",
+    "db:migrate": "pnpm --filter @cigbuddy/db migrate",
+    "db:push": "pnpm --filter @cigbuddy/db push",
+    "db:studio": "pnpm --filter @cigbuddy/db studio",
+    "db:seed": "pnpm --filter @cigbuddy/db seed",
+    "clean": "pnpm --recursive exec rm -rf dist .svelte-kit node_modules && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.5",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-svelte": "^3.23.0",
+    "globals": "^17.12.0",
+    "prettier": "^3.9.6",
+    "prettier-plugin-svelte": "^4.1.1",
+    "svelte": "^5.57.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.69.0"
+  }
+}

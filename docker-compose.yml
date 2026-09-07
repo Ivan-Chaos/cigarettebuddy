@@ -1,0 +1,93 @@
+name: cigbuddy
+
+x-postgres-url: &postgres-url
+  DATABASE_URL: postgres://${POSTGRES_USER:-cigbuddy}:${POSTGRES_PASSWORD:-cigbuddy}@postgres:5432/${POSTGRES_DB:-cigbuddy}
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: cigbuddy-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cigbuddy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cigbuddy}
+      POSTGRES_DB: ${POSTGRES_DB:-cigbuddy}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      # Postgres 18+ wants the whole directory mounted, not `data` — it keeps
+      # the cluster in a version subdirectory so pg_upgrade --link can work.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-cigbuddy} -d ${POSTGRES_DB:-cigbuddy}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot release step. `api` waits for it to exit 0 before starting.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: cigbuddy/api:latest
+    container_name: cigbuddy-migrate
+    command: ['node', 'dist/migrate.js']
+    environment:
+      <<: *postgres-url
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  # Compose injects configuration as real environment variables, which outrank
+  # every .env file. The per-app .env files are for running on a host: they hold
+  # host-oriented values (127.0.0.1, localhost origins) that are wrong in here.
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: cigbuddy/api:latest
+    container_name: cigbuddy-api
+    restart: unless-stopped
+    init: true
+    environment:
+      <<: *postgres-url
+      NODE_ENV: production
+      API_PORT: 3000
+      API_HOST: 0.0.0.0
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ORIGIN: http://localhost:${WEB_HOST_PORT:-8080}
+    ports:
+      - '${API_HOST_PORT:-3000}:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    image: cigbuddy/web:latest
+    container_name: cigbuddy-web
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # adapter-node rejects form POSTs whose origin does not match ORIGIN.
+      ORIGIN: http://localhost:${WEB_HOST_PORT:-8080}
+      # Server-side loads reach the API over the compose network.
+      API_URL: http://api:3000
+      PUBLIC_APP_NAME: ${PUBLIC_APP_NAME:-CigaretteBuddy}
+    ports:
+      - '${WEB_HOST_PORT:-8080}:3000'
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

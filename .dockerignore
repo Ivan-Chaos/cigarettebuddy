@@ -1,0 +1,19 @@
+# Build context only needs source + manifests; everything else is rebuilt inside.
+**/node_modules
+**/dist
+**/build
+**/.svelte-kit
+**/.vite
+**/coverage
+.git
+.gitignore
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+.tmp-*
+README.md
+Dockerfile
+**/Dockerfile
+.dockerignore
+docker-compose*.yml
