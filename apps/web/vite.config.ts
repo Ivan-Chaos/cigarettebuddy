@@ -12,10 +12,12 @@ export default defineConfig({
     port: Number(process.env.WEB_DEV_PORT ?? 5173),
     strictPort: true,
     proxy: {
-      // Lets the browser call /api/* on the dev server without CORS.
+      // Lets the browser call /api/* on the dev server without CORS. `ws` also
+      // forwards the room signaling WebSocket at /api/ws.
       '/api': {
         target: process.env.API_URL ?? 'http://127.0.0.1:3000',
         changeOrigin: true,
+        ws: true,
       },
     },
   },

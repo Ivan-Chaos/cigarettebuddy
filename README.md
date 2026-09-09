@@ -1,14 +1,17 @@
 # CigaretteBuddy
 
-pnpm monorepo boilerplate: **SvelteKit** frontend, **Express** API, **Postgres** via **Drizzle ORM**.
+Anonymous one-to-one video rooms on native WebRTC, in a pnpm monorepo:
+**SvelteKit** frontend, **Express** API (REST + signaling WebSocket),
+**Postgres** via **Drizzle ORM**. See [Video rooms](#video-rooms).
 
 ## Layout
 
 ```
 apps/
-  web/      SvelteKit 2 + Svelte 5 (adapter-node), SSR page + form action
-            + Dockerfile
-  api/      Express 5 + TypeScript, zod-validated env, pino logging
+  web/      SvelteKit 2 + Svelte 5 (adapter-node): lobby + /room/[id] page,
+            WebRTC client in src/lib/rtc + Dockerfile
+  api/      Express 5 + TypeScript, zod-validated env, pino logging,
+            room signaling over `ws` (src/signaling) + ICE/TURN config
             + Dockerfile (also provides the migrate entrypoint)
 packages/
   shared/   Zod schemas & types shared by web and api (the API contract)
@@ -49,11 +52,11 @@ browser never needs a cross-origin request.
 Each app owns its own configuration. There are three files, and each variable
 lives in exactly one of them:
 
-| File            | Holds                                                                                                        | Read by                                     |
-| --------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
-| `.env`          | Only what is genuinely shared: `NODE_ENV`, `LOG_LEVEL`, the database credentials, and the Compose host ports | every workspace, plus Compose interpolation |
-| `apps/api/.env` | `API_PORT`, `API_HOST`, `CORS_ORIGIN`                                                                        | the API only                                |
-| `apps/web/.env` | `API_URL`, `PUBLIC_*`, `PORT`, `ORIGIN`, `WEB_DEV_PORT`                                                      | the web app only                            |
+| File            | Holds                                                                                                                                            | Read by                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| `.env`          | Only what is genuinely shared: `NODE_ENV`, `LOG_LEVEL`, the database credentials, the Compose host ports, and the `STUN_*`/`TURN_*` ICE settings | every workspace, plus Compose interpolation |
+| `apps/api/.env` | `API_PORT`, `API_HOST`, `CORS_ORIGIN`                                                                                                            | the API only                                |
+| `apps/web/.env` | `API_URL`, `PUBLIC_*` (including `PUBLIC_SIGNALING_URL`), `PORT`, `ORIGIN`, `WEB_DEV_PORT`                                                       | the web app only                            |
 
 `pnpm env:init` creates all three from their `.env.example` siblings and leaves
 any that already exist untouched.
@@ -175,10 +178,14 @@ They differ in one place only — how the web app reaches the API:
 |               | `pnpm dev`                                | Docker                                               |
 | ------------- | ----------------------------------------- | ---------------------------------------------------- |
 | Web → API     | Vite proxies `/api/*` to `127.0.0.1:3000` | SSR calls `http://api:3000` over the Compose network |
+| Browser → WS  | Vite proxies `/api/ws` too (`ws: true`)   | `PUBLIC_SIGNALING_URL` points at the API's host port |
 | Postgres host | `localhost` (from `.env`)                 | `postgres` (set by Compose)                          |
 
-Nothing in the browser ever calls the API cross-origin in either mode: the
-SvelteKit server does the fetching, and mutations go through form actions.
+HTTP calls never leave the browser cross-origin: the SvelteKit server does the
+fetching, and mutations go through form actions. The one exception is the room
+signaling WebSocket, which the browser opens itself — through the Vite proxy in
+development, and straight to the API in Compose (the API only accepts upgrades
+whose `Origin` is listed in `CORS_ORIGIN` when running in production).
 
 ## Scripts
 
@@ -200,18 +207,73 @@ SvelteKit server does the fetching, and mutations go through form actions.
 
 ## API
 
-| Method | Path                        | Notes                                        |
-| ------ | --------------------------- | -------------------------------------------- |
-| GET    | `/api/health/live`          | Liveness — process only                      |
-| GET    | `/api/health/ready`         | Readiness — also pings Postgres, 503 if down |
-| GET    | `/api/users?limit=&offset=` | Paginated list with `meta.total`             |
-| POST   | `/api/users`                | Body validated by `createUserSchema`         |
-| GET    | `/api/users/:id`            |                                              |
-| PATCH  | `/api/users/:id`            |                                              |
-| DELETE | `/api/users/:id`            | 204                                          |
+| Method | Path                        | Notes                                            |
+| ------ | --------------------------- | ------------------------------------------------ |
+| GET    | `/api/health/live`          | Liveness — process only                          |
+| GET    | `/api/health/ready`         | Readiness — also pings Postgres, 503 if down     |
+| GET    | `/api/ice`                  | ICE servers browsers get, for debugging TURN     |
+| WS     | `/api/ws`                   | Room signaling — see [Video rooms](#video-rooms) |
+| GET    | `/api/users?limit=&offset=` | Paginated list with `meta.total`                 |
+| POST   | `/api/users`                | Body validated by `createUserSchema`             |
+| GET    | `/api/users/:id`            |                                                  |
+| PATCH  | `/api/users/:id`            |                                                  |
+| DELETE | `/api/users/:id`            | 204                                              |
 
 Errors always come back as `{ error: { message, code, details? } }` — see
 `apiErrorSchema` in `packages/shared`.
+
+## Video rooms
+
+The web app is an anonymous one-to-one video chat built on native WebRTC —
+`RTCPeerConnection`, `getUserMedia` and an `RTCDataChannel` for text chat. No
+accounts, no database: rooms live in the API's memory and vanish when empty.
+
+- `/` is the lobby: **Create room** generates an id and navigates to it; **Join**
+  accepts an id you were given.
+- `/room/<id>` is the room. Ids are 4–32 chars of `a-z`, `0-9` and `-`
+  (`roomIdSchema` in `packages/shared`). A third visitor is turned away with
+  "room full".
+- Chat messages travel peer to peer over the data channel, so they never touch
+  the server and only work once the two browsers are connected.
+- Camera access requires `localhost` or HTTPS — plain `http://` on a LAN IP will
+  not get a `getUserMedia` prompt.
+
+**How a call is set up.** The browser opens the signaling WebSocket
+(`/api/ws`), sends `join`, and gets back `joined` with a peer id, its role, and
+the ICE servers. The peer already in the room is the _polite_ side; the
+newcomer initiates the offer and creates the chat channel. Negotiation follows
+the spec's "perfect negotiation" pattern, so glare resolves itself and a
+survivor becomes polite again when a new peer arrives. The server only relays
+`offer`, `answer` and `ice-candidate` messages verbatim; the message shapes
+are the Zod schemas in `packages/shared/src/signaling.ts`.
+
+**TURN.** Peers behind symmetric NAT need a relay. Point the API at yours with
+the `STUN_URLS` / `TURN_*` variables in the root `.env` (see `.env.example`).
+Two coturn auth modes are supported:
+
+```ini
+# (a) static credentials — turnserver.conf
+lt-cred-mech
+user=cigbuddy:some-long-password
+#    .env: TURN_URLS=turn:turn.example.com:3478  TURN_USERNAME=cigbuddy  TURN_CREDENTIAL=some-long-password
+
+# (b) shared secret — turnserver.conf
+use-auth-secret
+static-auth-secret=some-long-secret
+#    .env: TURN_URLS=turn:turn.example.com:3478  TURN_SECRET=some-long-secret
+```
+
+With a shared secret the API mints a fresh `expiry:user` / HMAC-SHA1 credential
+for every peer that joins (`apps/api/src/ice.ts`), valid for
+`TURN_TTL_SECONDS`. Keep that longer than your longest call — coturn checks
+the expiry again on allocation refresh. `GET /api/ice` shows exactly what
+browsers receive, and `chrome://webrtc-internals` will show a `relay`
+candidate pair once the TURN server is actually in use.
+
+**Trying it.** Run `pnpm dev`, open http://localhost:5173, create a room and
+paste the URL into a second tab (or a second browser). Both videos should
+appear and chat should flow both ways; closing one tab puts the other back
+into "waiting"; a third tab sees "room full".
 
 ## Conventions worth keeping
 

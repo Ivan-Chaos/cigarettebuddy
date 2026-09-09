@@ -19,6 +19,14 @@ describe('api', () => {
     expect(res.body.error.code).toBe('not_found');
   });
 
+  it('serves the ICE server list', async () => {
+    const res = await request(app).get('/api/ice');
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data.iceServers)).toBe(true);
+    expect(res.body.data.iceServers.length).toBeGreaterThan(0);
+  });
+
   it('rejects an invalid user payload', async () => {
     const res = await request(app).post('/api/users').send({ email: 'not-an-email' });
 

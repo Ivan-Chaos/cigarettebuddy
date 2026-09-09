@@ -5,14 +5,41 @@ import { z } from 'zod';
 // variables (Docker, CI) win over both.
 loadEnv({ appDir: appDirFrom(import.meta.url) });
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  API_PORT: z.coerce.number().int().positive().default(3000),
-  API_HOST: z.string().default('0.0.0.0'),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  CORS_ORIGIN: z.string().default('http://localhost:5173'),
-});
+/** Compose passes unset variables as empty strings; treat those as absent. */
+const optionalString = z
+  .string()
+  .optional()
+  .transform((value) => (value ? value : undefined));
+
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    API_PORT: z.coerce.number().int().positive().default(3000),
+    API_HOST: z.string().default('0.0.0.0'),
+    LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+    DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+    CORS_ORIGIN: z.string().default('http://localhost:5173'),
+
+    // ICE servers handed to browsers for WebRTC. Comma-separated URL lists.
+    STUN_URLS: z.string().default(''),
+    TURN_URLS: z.string().default(''),
+    // Static credentials (coturn lt-cred-mech) ...
+    TURN_USERNAME: optionalString,
+    TURN_CREDENTIAL: optionalString,
+    // ... or a shared secret (coturn use-auth-secret); wins when both are set.
+    TURN_SECRET: optionalString,
+    TURN_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),
+  })
+  .refine(
+    (value) =>
+      !value.TURN_URLS.trim() ||
+      Boolean(value.TURN_SECRET) ||
+      Boolean(value.TURN_USERNAME && value.TURN_CREDENTIAL),
+    {
+      path: ['TURN_URLS'],
+      message: 'TURN_URLS requires either TURN_SECRET or TURN_USERNAME + TURN_CREDENTIAL',
+    },
+  );
 
 const parsed = envSchema.safeParse(process.env);
 
@@ -22,12 +49,19 @@ if (!parsed.success) {
   process.exit(1);
 }
 
+function splitList(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export const env = {
   ...parsed.data,
   isProduction: parsed.data.NODE_ENV === 'production',
-  corsOrigins: parsed.data.CORS_ORIGIN.split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean),
+  corsOrigins: splitList(parsed.data.CORS_ORIGIN),
+  stunUrls: splitList(parsed.data.STUN_URLS),
+  turnUrls: splitList(parsed.data.TURN_URLS),
 };
 
 export type Env = typeof env;

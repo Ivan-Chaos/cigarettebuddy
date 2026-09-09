@@ -79,3 +79,223 @@ button:disabled {
 .error {
   color: var(--danger);
 }
+
+button.secondary {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+button.danger {
+  background: var(--danger);
+}
+
+a {
+  color: var(--accent);
+}
+
+code {
+  font-size: 0.9em;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  padding: 0.05rem 0.35rem;
+}
+
+/* ---- Video room ---------------------------------------------------------- */
+
+main.wide {
+  max-width: 72rem;
+  padding-top: 2rem;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.badge.ok {
+  color: #9ece6a;
+  border-color: #9ece6a55;
+}
+
+.badge.bad {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.badge.pending {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.room-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.room-header h1 {
+  margin-bottom: 0.5rem;
+}
+
+.room-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.room-layout {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 60rem) {
+  .room-layout {
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    align-items: start;
+  }
+}
+
+.room-stage {
+  display: grid;
+  gap: 1rem;
+}
+
+.video-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.tile {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tile video.mirrored {
+  transform: scaleX(-1);
+}
+
+.tile-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.95rem;
+}
+
+.tile-label {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 55%);
+}
+
+.tile-tap {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: max-content;
+  height: max-content;
+}
+
+.controls {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 24rem;
+  max-height: 70vh;
+}
+
+.chat-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-right: 0.25rem;
+}
+
+.chat-empty,
+.chat-system {
+  font-size: 0.85rem;
+  text-align: center;
+  margin: 0.25rem 0;
+}
+
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  max-width: 85%;
+}
+
+.chat-msg.mine {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.chat-bubble {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.4rem 0.7rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-msg.mine .chat-bubble {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg));
+}
+
+.chat-time {
+  font-size: 0.7rem;
+}
+
+.chat-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.chat-form button {
+  flex-shrink: 0;
+}

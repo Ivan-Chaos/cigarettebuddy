@@ -58,7 +58,15 @@ services:
       API_PORT: 3000
       API_HOST: 0.0.0.0
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Also the Origin browsers send when they open the signaling WebSocket.
       CORS_ORIGIN: http://localhost:${WEB_HOST_PORT:-8080}
+      # WebRTC ICE config handed to browsers; empty means "not configured".
+      STUN_URLS: ${STUN_URLS:-}
+      TURN_URLS: ${TURN_URLS:-}
+      TURN_USERNAME: ${TURN_USERNAME:-}
+      TURN_CREDENTIAL: ${TURN_CREDENTIAL:-}
+      TURN_SECRET: ${TURN_SECRET:-}
+      TURN_TTL_SECONDS: ${TURN_TTL_SECONDS:-86400}
     ports:
       - '${API_HOST_PORT:-3000}:3000'
     depends_on:
@@ -83,6 +91,9 @@ services:
       # Server-side loads reach the API over the compose network.
       API_URL: http://api:3000
       PUBLIC_APP_NAME: ${PUBLIC_APP_NAME:-CigaretteBuddy}
+      # Browsers open the room signaling socket straight to the API's host
+      # port; there is no reverse proxy in this Compose file.
+      PUBLIC_SIGNALING_URL: ws://localhost:${API_HOST_PORT:-3000}/api/ws
     ports:
       - '${WEB_HOST_PORT:-8080}:3000'
     depends_on:
