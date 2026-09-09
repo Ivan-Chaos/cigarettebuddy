@@ -2,8 +2,14 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
+  import MicIcon from '@lucide/svelte/icons/mic';
+  import MicOffIcon from '@lucide/svelte/icons/mic-off';
+  import VideoIcon from '@lucide/svelte/icons/video';
+  import VideoOffIcon from '@lucide/svelte/icons/video-off';
   import ChatPanel from '$lib/components/ChatPanel.svelte';
+  import DeviceControl from '$lib/components/DeviceControl.svelte';
   import VideoTile from '$lib/components/VideoTile.svelte';
+  import { Button } from '$lib/components/ui/button';
   import { RoomSession, type RoomStatus } from '$lib/rtc/room.svelte';
   import type { PageData } from './$types';
 
@@ -34,8 +40,14 @@
         : 'pending',
   );
 
+  // Derived from the session rather than `location.href`, which still reads
+  // `/room` in the same flush that a random match assigns the id.
+  const shareUrl = $derived(
+    room.roomId ? new URL(resolve('/room/[[id]]', { id: room.roomId }), location.href).href : '',
+  );
+
   onMount(() => {
-    void room.join(data.roomId);
+    void (data.roomId ? room.join(data.roomId) : room.joinRandom());
 
     const bye = () => room.destroy();
     window.addEventListener('beforeunload', bye);
@@ -45,9 +57,22 @@
     };
   });
 
+  // Once a random match lands, rewrite `/room` to `/room/<id>` so copy-link,
+  // refresh and Back/Forward all see the real room. Same route id, so the
+  // component is reused and `load` simply re-runs with the id.
+  $effect(() => {
+    if (room.roomId && data.roomId !== room.roomId) {
+      void goto(resolve('/room/[[id]]', { id: room.roomId }), {
+        replaceState: true,
+        noScroll: true,
+        keepFocus: true,
+      });
+    }
+  });
+
   async function copyLink() {
     try {
-      await navigator.clipboard.writeText(location.href);
+      await navigator.clipboard.writeText(shareUrl);
       copied = true;
       setTimeout(() => (copied = false), 1500);
     } catch {
@@ -63,7 +88,13 @@
 
 <header class="room-header">
   <div>
-    <h1 style="font-size: 1.25rem">Room <code>{data.roomId}</code></h1>
+    <h1 style="font-size: 1.25rem">
+      {#if room.roomId}
+        Room <code>{room.roomId}</code>
+      {:else}
+        Finding you a room…
+      {/if}
+    </h1>
     <span class="badge {statusTone}">{statusText}</span>
     {#if room.connectionState !== 'none' && room.connectionState !== 'connected'}
       <span class="muted" style="margin-left: 0.5rem; font-size: 0.85rem"
@@ -72,7 +103,7 @@
     {/if}
   </div>
   <div class="room-actions">
-    <button type="button" class="secondary" onclick={copyLink}>
+    <button type="button" class="secondary" onclick={copyLink} disabled={!shareUrl}>
       {copied ? 'Copied!' : 'Copy link'}
     </button>
     <a href={resolve('/')} class="muted" style="font-size: 0.9rem">Leave</a>
@@ -82,7 +113,9 @@
 {#if room.status === 'full'}
   <section class="card" style="margin-top: 1.5rem">
     <h2 style="margin-top: 0; font-size: 1.1rem">This room is full</h2>
-    <p class="muted">Rooms hold two people. Ask for a new link or start your own room.</p>
+    <p class="muted">
+      Rooms hold two people. Head back to the lobby to be matched with someone else.
+    </p>
     <a href={resolve('/')}>Back to lobby</a>
   </section>
 {:else}
@@ -105,7 +138,8 @@
 
       {#if room.status === 'waiting'}
         <p class="muted" style="text-align: center">
-          Share this link with one other person: <code>{location.href}</code>
+          The next person to join is matched here automatically. To invite a specific person, share
+          <code>{shareUrl}</code>
         </p>
       {/if}
 
@@ -117,25 +151,29 @@
       {/if}
 
       <div class="controls">
-        <button
-          type="button"
-          class="secondary"
-          onclick={() => room.toggleMic()}
+        <DeviceControl
+          heading="Microphone"
+          label={room.micEnabled ? 'Mute mic' : 'Unmute mic'}
+          icon={room.micEnabled ? MicIcon : MicOffIcon}
+          active={room.micEnabled}
           disabled={!room.localStream}
-          aria-pressed={!room.micEnabled}
-        >
-          {room.micEnabled ? 'Mute mic' : 'Unmute mic'}
-        </button>
-        <button
-          type="button"
-          class="secondary"
-          onclick={() => room.toggleCam()}
+          devices={room.audioInputs}
+          selected={room.audioDeviceId}
+          onToggle={() => room.toggleMic()}
+          onSelect={(id) => void room.selectAudioDevice(id)}
+        />
+        <DeviceControl
+          heading="Camera"
+          label={room.camEnabled ? 'Stop camera' : 'Start camera'}
+          icon={room.camEnabled ? VideoIcon : VideoOffIcon}
+          active={room.camEnabled}
           disabled={!room.localStream}
-          aria-pressed={!room.camEnabled}
-        >
-          {room.camEnabled ? 'Stop camera' : 'Start camera'}
-        </button>
-        <button type="button" class="danger" onclick={hangUp}>Hang up</button>
+          devices={room.videoInputs}
+          selected={room.videoDeviceId}
+          onToggle={() => room.toggleCam()}
+          onSelect={(id) => void room.selectVideoDevice(id)}
+        />
+        <Button variant="destructive" onclick={hangUp}>Hang up</Button>
       </div>
     </section>
 

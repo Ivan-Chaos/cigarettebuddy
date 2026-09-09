@@ -2,6 +2,7 @@ import {
   SIGNALING_CLOSE_CODES,
   chatMessageSchema,
   type ChatMessage,
+  type ClientMessage,
   type IceServer,
   type ServerMessage,
 } from '@cigbuddy/shared';
@@ -37,6 +38,12 @@ export class RoomSession {
   camEnabled = $state(true);
   mediaDenied = $state(false);
 
+  /** Available inputs; labels are only populated once media permission exists. */
+  audioInputs = $state.raw<MediaDeviceInfo[]>([]);
+  videoInputs = $state.raw<MediaDeviceInfo[]>([]);
+  audioDeviceId = $state('');
+  videoDeviceId = $state('');
+
   chatReady = $state(false);
   messages = $state<ChatEntry[]>([]);
 
@@ -45,9 +52,30 @@ export class RoomSession {
   private chat: RTCDataChannel | null = null;
   private iceServers: IceServer[] = [];
   private destroyed = false;
+  private readonly onDeviceChange = () => void this.refreshDevices();
+  private watchingDevices = false;
 
+  /** Joins a specific room by id. */
   async join(roomId: string): Promise<void> {
     this.roomId = roomId;
+    await this.open({ type: 'join', roomId });
+  }
+
+  /** Lets the server pick a room with a free seat (or open a fresh one). */
+  async joinRandom(): Promise<void> {
+    this.roomId = '';
+    await this.open({ type: 'join-random' });
+  }
+
+  /** Drops the peer and socket but keeps the camera, then joins again. */
+  async rejoin(): Promise<void> {
+    this.leaveRoom();
+    await (this.roomId ? this.join(this.roomId) : this.joinRandom());
+  }
+
+  private async open(
+    hello: Extract<ClientMessage, { type: 'join' | 'join-random' }>,
+  ): Promise<void> {
     this.destroyed = false;
     this.error = null;
 
@@ -75,13 +103,7 @@ export class RoomSession {
       return;
     }
 
-    signaling.send({ type: 'join', roomId });
-  }
-
-  /** Drops the peer and socket but keeps the camera, then joins again. */
-  async rejoin(): Promise<void> {
-    this.leaveRoom();
-    await this.join(this.roomId);
+    signaling.send(hello);
   }
 
   sendChat(text: string): void {
@@ -114,6 +136,16 @@ export class RoomSession {
     for (const track of this.localStream?.getVideoTracks() ?? []) track.enabled = this.camEnabled;
   }
 
+  /** Switches the microphone; the live call keeps going via `replaceTrack`. */
+  selectAudioDevice(deviceId: string): Promise<void> {
+    return this.switchInput('audio', deviceId);
+  }
+
+  /** Switches the camera; the live call keeps going via `replaceTrack`. */
+  selectVideoDevice(deviceId: string): Promise<void> {
+    return this.switchInput('video', deviceId);
+  }
+
   hangUp(): void {
     this.destroy();
   }
@@ -125,6 +157,10 @@ export class RoomSession {
     for (const track of this.localStream?.getTracks() ?? []) track.stop();
     this.localStream = null;
     this.status = 'idle';
+    if (this.watchingDevices) {
+      navigator.mediaDevices.removeEventListener('devicechange', this.onDeviceChange);
+      this.watchingDevices = false;
+    }
   }
 
   // ---- internals -----------------------------------------------------------
@@ -136,15 +172,95 @@ export class RoomSession {
       this.mediaDenied = false;
       for (const track of stream.getAudioTracks()) track.enabled = this.micEnabled;
       for (const track of stream.getVideoTracks()) track.enabled = this.camEnabled;
+      this.rememberSelection(stream);
     } catch {
       this.mediaDenied = true;
       this.system('Camera or microphone unavailable. You can still see your peer and chat.');
     }
+    await this.refreshDevices();
+  }
+
+  /** Enumerates inputs and keeps the list fresh as devices are (un)plugged. */
+  private async refreshDevices(): Promise<void> {
+    if (!this.watchingDevices) {
+      navigator.mediaDevices.addEventListener('devicechange', this.onDeviceChange);
+      this.watchingDevices = true;
+    }
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      // Without permission Chrome reports placeholder entries with empty ids.
+      const usable = devices.filter((d) => d.deviceId !== '');
+      this.audioInputs = usable.filter((d) => d.kind === 'audioinput');
+      this.videoInputs = usable.filter((d) => d.kind === 'videoinput');
+    } catch (err) {
+      console.error('[rtc] enumerateDevices failed', err);
+    }
+  }
+
+  private rememberSelection(stream: MediaStream): void {
+    const audioId = stream.getAudioTracks()[0]?.getSettings().deviceId;
+    const videoId = stream.getVideoTracks()[0]?.getSettings().deviceId;
+    if (audioId) this.audioDeviceId = audioId;
+    if (videoId) this.videoDeviceId = videoId;
+  }
+
+  private async switchInput(kind: 'audio' | 'video', deviceId: string): Promise<void> {
+    const current = kind === 'audio' ? this.audioDeviceId : this.videoDeviceId;
+    if (!deviceId || deviceId === current) return;
+
+    let fresh: MediaStream;
+    try {
+      fresh = await navigator.mediaDevices.getUserMedia({
+        [kind]: { deviceId: { exact: deviceId } },
+      });
+    } catch (err) {
+      console.error(`[rtc] could not open ${kind} device`, err);
+      this.system(`Could not switch ${kind === 'audio' ? 'microphone' : 'camera'}.`);
+      return;
+    }
+
+    const track = fresh.getTracks()[0];
+    if (!track || this.destroyed) {
+      for (const t of fresh.getTracks()) t.stop();
+      return;
+    }
+    track.enabled = kind === 'audio' ? this.micEnabled : this.camEnabled;
+
+    const stream = this.localStream ?? new MediaStream();
+    const old = kind === 'audio' ? stream.getAudioTracks() : stream.getVideoTracks();
+    for (const t of old) {
+      t.stop();
+      stream.removeTrack(t);
+    }
+    stream.addTrack(track);
+
+    // Swap the track on the live connection without renegotiating when we can.
+    const pc = this.peer?.pc;
+    if (pc) {
+      const sender = pc.getSenders().find((s) => s.track?.kind === kind || old.includes(s.track!));
+      if (sender) {
+        try {
+          await sender.replaceTrack(track);
+        } catch (err) {
+          console.error('[rtc] replaceTrack failed', err);
+        }
+      } else {
+        pc.addTrack(track, stream);
+      }
+    }
+
+    // Reassign so `$state.raw` consumers notice, even when it is the same object.
+    this.localStream = stream;
+    this.mediaDenied = false;
+    if (kind === 'audio') this.audioDeviceId = deviceId;
+    else this.videoDeviceId = deviceId;
+    await this.refreshDevices();
   }
 
   private async onServerMessage(message: ServerMessage): Promise<void> {
     switch (message.type) {
       case 'joined':
+        this.roomId = message.roomId;
         this.iceServers = message.iceServers;
         if (message.peerPresent) {
           this.startPeer(false);

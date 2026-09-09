@@ -43,6 +43,8 @@ export type IceCandidate = z.infer<typeof iceCandidateSchema>;
 
 export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('join'), roomId: roomIdSchema }),
+  /** Join any room with a free seat, or a fresh one; the server picks the id. */
+  z.object({ type: z.literal('join-random') }),
   z.object({ type: z.literal('offer'), description: sessionDescriptionSchema }),
   z.object({ type: z.literal('answer'), description: sessionDescriptionSchema }),
   z.object({ type: z.literal('ice-candidate'), candidate: iceCandidateSchema }),

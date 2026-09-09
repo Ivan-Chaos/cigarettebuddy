@@ -8,7 +8,8 @@ Anonymous one-to-one video rooms on native WebRTC, in a pnpm monorepo:
 
 ```
 apps/
-  web/      SvelteKit 2 + Svelte 5 (adapter-node): lobby + /room/[id] page,
+  web/      SvelteKit 2 + Svelte 5 (adapter-node): lobby + /room/[[id]] page,
+            Tailwind v4 + shadcn-svelte (src/lib/components/ui),
             WebRTC client in src/lib/rtc + Dockerfile
   api/      Express 5 + TypeScript, zod-validated env, pino logging,
             room signaling over `ws` (src/signaling) + ICE/TURN config
@@ -228,19 +229,27 @@ The web app is an anonymous one-to-one video chat built on native WebRTC —
 `RTCPeerConnection`, `getUserMedia` and an `RTCDataChannel` for text chat. No
 accounts, no database: rooms live in the API's memory and vanish when empty.
 
-- `/` is the lobby: **Create room** generates an id and navigates to it; **Join**
-  accepts an id you were given.
-- `/room/<id>` is the room. Ids are 4–32 chars of `a-z`, `0-9` and `-`
+- `/` is the lobby: a single **Join room** button. It navigates to `/room`,
+  which asks the server for a random match: any room that currently has one
+  person in it (picked at random when several qualify), or a fresh room when
+  none is open. Once assigned, the URL is rewritten to `/room/<id>`.
+- `/room/<id>` joins that specific room, so links stay shareable and a refresh
+  puts you back with your peer. Ids are 4–32 chars of `a-z`, `0-9` and `-`
   (`roomIdSchema` in `packages/shared`). A third visitor is turned away with
   "room full".
+- Rooms are matched purely by occupancy: someone waiting in a room you opened
+  from a shared link is just as matchable as someone who clicked **Join room**.
 - Chat messages travel peer to peer over the data channel, so they never touch
   the server and only work once the two browsers are connected.
 - Camera access requires `localhost` or HTTPS — plain `http://` on a LAN IP will
   not get a `getUserMedia` prompt.
 
 **How a call is set up.** The browser opens the signaling WebSocket
-(`/api/ws`), sends `join`, and gets back `joined` with a peer id, its role, and
-the ICE servers. The peer already in the room is the _polite_ side; the
+(`/api/ws`), sends `join` (a specific id) or `join-random` (let the server
+pick), and gets back `joined` with the room id, a peer id, its role, and the
+ICE servers. Matching happens in `RoomManager.joinRandom` on the API's single
+thread, so two people clicking at the same moment end up together rather than
+in two half-empty rooms. The peer already in the room is the _polite_ side; the
 newcomer initiates the offer and creates the chat channel. Negotiation follows
 the spec's "perfect negotiation" pattern, so glare resolves itself and a
 survivor becomes polite again when a new peer arrives. The server only relays
@@ -270,10 +279,60 @@ the expiry again on allocation refresh. `GET /api/ice` shows exactly what
 browsers receive, and `chrome://webrtc-internals` will show a `relay`
 candidate pair once the TURN server is actually in use.
 
-**Trying it.** Run `pnpm dev`, open http://localhost:5173, create a room and
-paste the URL into a second tab (or a second browser). Both videos should
-appear and chat should flow both ways; closing one tab puts the other back
-into "waiting"; a third tab sees "room full".
+**Trying it.** Run `pnpm dev`, open http://localhost:5173 in two tabs (or two
+browsers) and click **Join room** in both. They land in the same `/room/<id>`,
+both videos should appear and chat should flow both ways. A third tab clicking
+**Join room** gets a fresh room; pasting the first room's URL into it instead
+shows "room full". Closing one tab puts the other back into "waiting", where
+the next **Join room** click can be matched to it.
+
+**Known limitation.** A browser that vanishes without closing its socket
+(network drop, killed process) keeps its seat until the WebSocket heartbeat
+reaps it, up to twice `heartbeatMs` (60 s by default). Someone matched into
+that room in the meantime sits at "Connecting to peer…" until the ghost is
+removed, then drops back to "waiting" and is matchable again.
+
+## UI (Tailwind + shadcn-svelte)
+
+`apps/web` uses **Tailwind CSS v4** (via `@tailwindcss/vite`, no config file —
+the theme lives in CSS) and **shadcn-svelte**, whose components are _vendored_
+into the repo rather than imported from a package:
+
+```
+apps/web/
+  components.json            CLI config: aliases, style (vega), icon library
+  src/lib/utils.ts           cn() + the prop helper types the components use
+  src/lib/components/ui/     the generated components -- yours to edit
+```
+
+Add a component with the CLI (it writes into `src/lib/components/ui`, then run
+`pnpm install` for any new peer deps):
+
+```bash
+pnpm --filter @cigbuddy/web exec shadcn-svelte add <name>
+pnpm install
+```
+
+If you ever re-run `init`, pass `--preset bd1gAJJg` to reproduce this project's
+design system (vega / zinc / Lucide / Inter, default radius).
+
+### Theming
+
+`src/app.css` has three parts, in cascade order:
+
+1. The generated shadcn token blocks (`:root`, `.dark`, `@theme inline`).
+2. **Our overrides** — a `.dark` block retuning the tokens to the app's own
+   palette (`#0f1115` ground, `#7aa2f7` accent). The app is dark-only, so
+   `src/app.html` puts `class="dark"` on `<html>`; drop that and add a toggle if
+   a light mode is ever wanted.
+3. The **pre-shadcn stylesheet** (`.card`, `.tile`, `.chat-*`, bare `button` and
+   `input` rules) wrapped in `@layer base`, so Tailwind utilities — and
+   therefore every shadcn component — always beat it. Its variables are prefixed
+   `--app-*` because `--border`, `--accent` and `--muted` mean different things
+   in the two systems. Delete rules from that block as screens migrate.
+
+`src/lib/components/ui/` is excluded from ESLint and Prettier: the CLI owns the
+formatting, and re-running `add` would otherwise churn the diff.
 
 ## Conventions worth keeping
 

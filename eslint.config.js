@@ -41,6 +41,8 @@ export default ts.config(
       '**/build/',
       '**/.svelte-kit/',
       'packages/db/src/migrations/',
+      // Vendored by the shadcn-svelte CLI; regenerated on every `shadcn-svelte add`.
+      'apps/web/src/lib/components/ui/',
     ],
   },
 );

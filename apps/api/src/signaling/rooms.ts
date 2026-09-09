@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { generateRoomId } from './room-id.js';
 
 export const MAX_PEERS = 2;
 
@@ -17,6 +18,13 @@ export interface LeaveResult<T> {
   other: Peer<T> | null;
 }
 
+export interface RoomManagerOptions {
+  /** Picks an index in `[0, count)` among the open rooms. Injectable for tests. */
+  pick?: (count: number) => number;
+  /** Produces a candidate id for a brand-new room. Injectable for tests. */
+  newRoomId?: () => string;
+}
+
 /**
  * In-memory room bookkeeping, generic over the connection handle so it can be
  * unit-tested with plain objects and used with `WebSocket` at runtime.
@@ -24,6 +32,13 @@ export interface LeaveResult<T> {
 export class RoomManager<T> {
   private readonly rooms = new Map<string, Set<Peer<T>>>();
   private readonly byConn = new Map<T, Peer<T>>();
+  private readonly pick: (count: number) => number;
+  private readonly newRoomId: () => string;
+
+  constructor(options: RoomManagerOptions = {}) {
+    this.pick = options.pick ?? ((count) => Math.floor(Math.random() * count));
+    this.newRoomId = options.newRoomId ?? generateRoomId;
+  }
 
   join(roomId: string, conn: T, id: string = randomUUID()): JoinResult<T> {
     if (this.byConn.has(conn)) {
@@ -42,6 +57,21 @@ export class RoomManager<T> {
     this.byConn.set(conn, peer);
 
     return { ok: true, peer, other };
+  }
+
+  /**
+   * Joins a random room that still has a free seat, or a fresh room when none
+   * does. Empty rooms are deleted on leave, so every known room has 1 or 2
+   * peers and a lone survivor is automatically matchable again.
+   */
+  joinRandom(conn: T, id?: string): JoinResult<T> {
+    if (this.byConn.has(conn)) {
+      return { ok: false, code: 'already_joined' };
+    }
+
+    const open = [...this.rooms.keys()].filter((roomId) => this.roomSize(roomId) < MAX_PEERS);
+    const roomId = open[this.pick(open.length)] ?? this.freshRoomId();
+    return this.join(roomId, conn, id);
   }
 
   /** Idempotent. Deletes the room once it is empty. */
@@ -79,6 +109,12 @@ export class RoomManager<T> {
 
   roomCount(): number {
     return this.rooms.size;
+  }
+
+  private freshRoomId(): string {
+    let roomId = this.newRoomId();
+    while (this.rooms.has(roomId)) roomId = this.newRoomId();
+    return roomId;
   }
 }
 

@@ -1,301 +1,457 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn-svelte/tailwind.css';
+@import '@fontsource-variable/inter';
+
+@custom-variant dark (&:is(.dark *));
+
 :root {
-  --bg: #0f1115;
-  --surface: #171a21;
-  --border: #262b36;
-  --text: #e6e8ee;
-  --muted: #969db0;
-  --accent: #7aa2f7;
-  --danger: #f77a8b;
-  color-scheme: dark;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.141 0.005 285.823);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.141 0.005 285.823);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.141 0.005 285.823);
+  --primary: oklch(0.21 0.006 285.885);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.21 0.006 285.885);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.92 0.004 286.32);
+  --input: oklch(0.92 0.004 286.32);
+  --ring: oklch(0.705 0.015 286.067);
+  --chart-1: oklch(0.871 0.006 286.286);
+  --chart-2: oklch(0.552 0.016 285.938);
+  --chart-3: oklch(0.442 0.017 285.786);
+  --chart-4: oklch(0.37 0.013 285.805);
+  --chart-5: oklch(0.274 0.006 286.033);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.141 0.005 285.823);
+  --sidebar-primary: oklch(0.21 0.006 285.885);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.967 0.001 286.375);
+  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-border: oklch(0.92 0.004 286.32);
+  --sidebar-ring: oklch(0.705 0.015 286.067);
 }
 
-* {
-  box-sizing: border-box;
+.dark {
+  --background: oklch(0.141 0.005 285.823);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.21 0.006 285.885);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.21 0.006 285.885);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.92 0.004 286.32);
+  --primary-foreground: oklch(0.21 0.006 285.885);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.274 0.006 286.033);
+  --muted-foreground: oklch(0.705 0.015 286.067);
+  --accent: oklch(0.274 0.006 286.033);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.552 0.016 285.938);
+  --chart-1: oklch(0.871 0.006 286.286);
+  --chart-2: oklch(0.552 0.016 285.938);
+  --chart-3: oklch(0.442 0.017 285.786);
+  --chart-4: oklch(0.37 0.013 285.805);
+  --chart-5: oklch(0.274 0.006 286.033);
+  --sidebar: oklch(0.21 0.006 285.885);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.274 0.006 286.033);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.552 0.016 285.938);
 }
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family:
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    sans-serif;
-  line-height: 1.5;
+@theme inline {
+  --font-sans: 'Inter Variable', sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-main {
-  max-width: 42rem;
-  margin: 0 auto;
-  padding: 3rem 1.25rem 5rem;
-}
-
-h1 {
-  margin: 0 0 0.25rem;
-  font-size: 1.75rem;
-  letter-spacing: -0.02em;
-}
-
-.muted {
-  color: var(--muted);
-}
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  padding: 1.25rem;
-}
-
-input,
-button {
-  font: inherit;
-  border-radius: 0.5rem;
-  border: 1px solid var(--border);
-  padding: 0.5rem 0.75rem;
-}
-
-input {
-  background: var(--bg);
-  color: var(--text);
-  width: 100%;
-}
-
-button {
-  background: var(--accent);
-  color: #0f1115;
-  border-color: transparent;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.error {
-  color: var(--danger);
-}
-
-button.secondary {
-  background: var(--surface);
-  color: var(--text);
-  border-color: var(--border);
-}
-
-button.danger {
-  background: var(--danger);
-}
-
-a {
-  color: var(--accent);
-}
-
-code {
-  font-size: 0.9em;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 0.35rem;
-  padding: 0.05rem 0.35rem;
-}
-
-/* ---- Video room ---------------------------------------------------------- */
-
-main.wide {
-  max-width: 72rem;
-  padding-top: 2rem;
-}
-
-.badge {
-  display: inline-block;
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.15rem 0.6rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--muted);
-}
-
-.badge.ok {
-  color: #9ece6a;
-  border-color: #9ece6a55;
-}
-
-.badge.bad {
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
-}
-
-.badge.pending {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-.room-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.room-header h1 {
-  margin-bottom: 0.5rem;
-}
-
-.room-actions {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.room-layout {
-  display: grid;
-  gap: 1.25rem;
-  margin-top: 1.5rem;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-@media (min-width: 60rem) {
-  .room-layout {
-    grid-template-columns: minmax(0, 1fr) 20rem;
-    align-items: start;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
   }
 }
 
-.room-stage {
-  display: grid;
-  gap: 1rem;
+/* ---- CigaretteBuddy palette ----------------------------------------------
+   The app is dark-only (<html class="dark">), so the shadcn tokens are retuned
+   from the stock zinc scale to the colours the UI already used. Anything below
+   this line is ours; everything above it is generated by `shadcn-svelte init`.
+   -------------------------------------------------------------------------- */
+
+.dark {
+  --background: #0f1115;
+  --foreground: #e6e8ee;
+  --card: #171a21;
+  --card-foreground: #e6e8ee;
+  --popover: #171a21;
+  --popover-foreground: #e6e8ee;
+  --primary: #7aa2f7;
+  --primary-foreground: #0f1115;
+  --secondary: #262b36;
+  --secondary-foreground: #e6e8ee;
+  --muted: #1c202a;
+  --muted-foreground: #969db0;
+  --accent: #262b36;
+  --accent-foreground: #e6e8ee;
+  --destructive: #f77a8b;
+  --border: #262b36;
+  --input: #262b36;
+  --ring: #7aa2f7;
+  --sidebar: #171a21;
+  --sidebar-foreground: #e6e8ee;
+  --sidebar-primary: #7aa2f7;
+  --sidebar-primary-foreground: #0f1115;
+  --sidebar-accent: #262b36;
+  --sidebar-accent-foreground: #e6e8ee;
+  --sidebar-border: #262b36;
+  --sidebar-ring: #7aa2f7;
 }
 
-.video-grid {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+/* Aliases for the hand-written styles below, which predate shadcn. They are
+   prefixed so they cannot collide with the shadcn tokens of the same name
+   (--border, --accent and --muted mean different things in the two systems). */
+:root {
+  --app-bg: var(--background);
+  --app-surface: var(--card);
+  --app-border: var(--border);
+  --app-text: var(--foreground);
+  --app-muted: var(--muted-foreground);
+  --app-accent: var(--primary);
+  --app-danger: var(--destructive);
+  color-scheme: dark;
 }
 
-.tile {
-  position: relative;
-  aspect-ratio: 16 / 9;
-  background: #000;
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  overflow: hidden;
-}
+/* The pre-shadcn stylesheet. It lives in @layer base so Tailwind utilities --
+   and therefore every shadcn component -- always win over these element
+   selectors. Delete rules from here as screens migrate to shadcn. */
+@layer base {
+  main {
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: 3rem 1.25rem 5rem;
+  }
 
-.tile video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
+  h1 {
+    margin: 0 0 0.25rem;
+    font-size: 1.75rem;
+    letter-spacing: -0.02em;
+  }
 
-.tile video.mirrored {
-  transform: scaleX(-1);
-}
+  .muted {
+    color: var(--app-muted);
+  }
 
-.tile-placeholder {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 0.95rem;
-}
+  .card {
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+  }
 
-.tile-label {
-  position: absolute;
-  left: 0.6rem;
-  bottom: 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  background: rgb(0 0 0 / 55%);
-}
+  input,
+  button {
+    font: inherit;
+    border-radius: 0.5rem;
+    border: 1px solid var(--app-border);
+    padding: 0.5rem 0.75rem;
+  }
 
-.tile-tap {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: max-content;
-  height: max-content;
-}
+  input {
+    background: var(--app-bg);
+    color: var(--app-text);
+    width: 100%;
+  }
 
-.controls {
-  display: flex;
-  justify-content: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
+  button {
+    background: var(--app-accent);
+    color: #0f1115;
+    border-color: transparent;
+    font-weight: 600;
+    cursor: pointer;
+  }
 
-.chat {
-  display: flex;
-  flex-direction: column;
-  min-height: 24rem;
-  max-height: 70vh;
-}
+  button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 
-.chat-title {
-  margin: 0 0 0.75rem;
-  font-size: 1rem;
-}
+  .error {
+    color: var(--app-danger);
+  }
 
-.chat-list {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding-right: 0.25rem;
-}
+  button.secondary {
+    background: var(--app-surface);
+    color: var(--app-text);
+    border-color: var(--app-border);
+  }
 
-.chat-empty,
-.chat-system {
-  font-size: 0.85rem;
-  text-align: center;
-  margin: 0.25rem 0;
-}
+  button.danger {
+    background: var(--app-danger);
+  }
 
-.chat-msg {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.15rem;
-  max-width: 85%;
-}
+  a {
+    color: var(--app-accent);
+  }
 
-.chat-msg.mine {
-  align-self: flex-end;
-  align-items: flex-end;
-}
+  code {
+    font-size: 0.9em;
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: 0.35rem;
+    padding: 0.05rem 0.35rem;
+  }
 
-.chat-bubble {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  padding: 0.4rem 0.7rem;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
+  /* ---- Video room ---------------------------------------------------------- */
 
-.chat-msg.mine .chat-bubble {
-  background: color-mix(in srgb, var(--accent) 18%, var(--bg));
-}
+  main.wide {
+    max-width: 72rem;
+    padding-top: 2rem;
+  }
 
-.chat-time {
-  font-size: 0.7rem;
-}
+  .badge {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid var(--app-border);
+    background: var(--app-surface);
+    color: var(--app-muted);
+  }
 
-.chat-form {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
+  .badge.ok {
+    color: #9ece6a;
+    border-color: #9ece6a55;
+  }
 
-.chat-form button {
-  flex-shrink: 0;
+  .badge.bad {
+    color: var(--app-danger);
+    border-color: color-mix(in srgb, var(--app-danger) 35%, transparent);
+  }
+
+  .badge.pending {
+    color: var(--app-accent);
+    border-color: color-mix(in srgb, var(--app-accent) 35%, transparent);
+  }
+
+  .room-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .room-header h1 {
+    margin-bottom: 0.5rem;
+  }
+
+  .room-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .room-layout {
+    display: grid;
+    gap: 1.25rem;
+    margin-top: 1.5rem;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  @media (min-width: 60rem) {
+    .room-layout {
+      grid-template-columns: minmax(0, 1fr) 20rem;
+      align-items: start;
+    }
+  }
+
+  .room-stage {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .video-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  }
+
+  .tile {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    background: #000;
+    border: 1px solid var(--app-border);
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+
+  .tile video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .tile video.mirrored {
+    transform: scaleX(-1);
+  }
+
+  .tile-placeholder {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 0.95rem;
+  }
+
+  .tile-label {
+    position: absolute;
+    left: 0.6rem;
+    bottom: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 55%);
+  }
+
+  .tile-tap {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: max-content;
+    height: max-content;
+  }
+
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .chat {
+    display: flex;
+    flex-direction: column;
+    min-height: 24rem;
+    max-height: 70vh;
+  }
+
+  .chat-title {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+  }
+
+  .chat-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-right: 0.25rem;
+  }
+
+  .chat-empty,
+  .chat-system {
+    font-size: 0.85rem;
+    text-align: center;
+    margin: 0.25rem 0;
+  }
+
+  .chat-msg {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+    max-width: 85%;
+  }
+
+  .chat-msg.mine {
+    align-self: flex-end;
+    align-items: flex-end;
+  }
+
+  .chat-bubble {
+    background: var(--app-bg);
+    border: 1px solid var(--app-border);
+    border-radius: 0.75rem;
+    padding: 0.4rem 0.7rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .chat-msg.mine .chat-bubble {
+    background: color-mix(in srgb, var(--app-accent) 18%, var(--app-bg));
+  }
+
+  .chat-time {
+    font-size: 0.7rem;
+  }
+
+  .chat-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+
+  .chat-form button {
+    flex-shrink: 0;
+  }
 }

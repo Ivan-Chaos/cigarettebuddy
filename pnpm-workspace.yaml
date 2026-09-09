@@ -5,3 +5,6 @@ packages:
 # pnpm blocks dependency lifecycle scripts unless they are allowlisted here.
 allowBuilds:
   esbuild: true
+
+minimumReleaseAgeExclude:
+  - '@lucide/svelte@1.43.0'

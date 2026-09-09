@@ -4,3 +4,4 @@ build
 .svelte-kit
 pnpm-lock.yaml
 packages/db/src/migrations
+apps/web/src/lib/components/ui

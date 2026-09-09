@@ -1,3 +1,4 @@
+import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 import { appDirFrom, loadEnv } from '@cigbuddy/env';
@@ -7,7 +8,7 @@ import { appDirFrom, loadEnv } from '@cigbuddy/env';
 loadEnv({ appDir: appDirFrom(import.meta.url, 0) });
 
 export default defineConfig({
-  plugins: [sveltekit()],
+  plugins: [tailwindcss(), sveltekit()],
   server: {
     port: Number(process.env.WEB_DEV_PORT ?? 5173),
     strictPort: true,

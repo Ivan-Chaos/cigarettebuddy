@@ -1,8 +1,8 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
-import type { ServerMessage } from '@cigbuddy/shared';
+import { roomIdSchema, type ServerMessage } from '@cigbuddy/shared';
 import { createApp } from '../app.js';
 import { attachSignaling, type Signaling } from './attach.js';
 
@@ -23,6 +23,10 @@ afterAll(async () => {
   await signaling.close();
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
+
+// Client-side close is asynchronous, so a lone peer from the previous test can
+// still be seated when the next one starts, and `join-random` would find it.
+beforeEach(() => vi.waitFor(() => expect(signaling.roomCount()).toBe(0)));
 
 function connect(path = '/api/ws'): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
@@ -149,6 +153,60 @@ describe('signaling', () => {
 
     expect(await nextMessage(a)).toMatchObject({ type: 'error', code: 'not_in_room' });
     closeAll(a);
+  });
+
+  it('opens a fresh room for a random join when nothing is open', async () => {
+    const a = await connect();
+    send(a, { type: 'join-random' });
+    const joined = await nextMessage(a);
+
+    expect(joined).toMatchObject({ type: 'joined', polite: true, peerPresent: false });
+    if (joined.type === 'joined') {
+      expect(roomIdSchema.safeParse(joined.roomId).success).toBe(true);
+    }
+
+    closeAll(a);
+  });
+
+  it('pairs two random joiners in the same room', async () => {
+    const a = await connect();
+    send(a, { type: 'join-random' });
+    const joinedA = await nextMessage(a);
+
+    const b = await connect();
+    const peerJoined = nextMessage(a);
+    send(b, { type: 'join-random' });
+    const joinedB = await nextMessage(b);
+
+    expect(joinedB).toMatchObject({
+      type: 'joined',
+      roomId: joinedA.type === 'joined' ? joinedA.roomId : '',
+      polite: false,
+      peerPresent: true,
+    });
+    expect(await peerJoined).toEqual({
+      type: 'peer-joined',
+      peerId: joinedB.type === 'joined' ? joinedB.peerId : '',
+    });
+
+    closeAll(a, b);
+  });
+
+  it('matches a random joiner into a room someone joined by id', async () => {
+    const a = await connect();
+    send(a, { type: 'join', roomId: 'open-test' });
+    await nextMessage(a);
+
+    const b = await connect();
+    send(b, { type: 'join-random' });
+
+    expect(await nextMessage(b)).toMatchObject({
+      type: 'joined',
+      roomId: 'open-test',
+      peerPresent: true,
+    });
+
+    closeAll(a, b);
   });
 
   it('flags malformed frames and bad room ids', async () => {

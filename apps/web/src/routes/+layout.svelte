@@ -5,7 +5,7 @@
 
   let { children } = $props();
 
-  const wide = $derived(page.url.pathname.startsWith('/room/'));
+  const wide = $derived(page.url.pathname.startsWith('/room'));
 </script>
 
 <svelte:head>

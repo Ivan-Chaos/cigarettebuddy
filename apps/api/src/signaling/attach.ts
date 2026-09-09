@@ -10,7 +10,7 @@ import {
   type SignalingErrorCode,
 } from '@cigbuddy/shared';
 import { logger } from '../logger.js';
-import { RoomManager } from './rooms.js';
+import { RoomManager, type JoinResult } from './rooms.js';
 
 export interface SignalingOptions {
   /** URL path the upgrade must target. */
@@ -124,7 +124,9 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
   function handleMessage(ws: WebSocket, msg: ClientMessage) {
     switch (msg.type) {
       case 'join':
-        return handleJoin(ws, msg.roomId);
+        return handleJoin(ws, rooms.join(msg.roomId, ws));
+      case 'join-random':
+        return handleJoin(ws, rooms.joinRandom(ws));
       case 'leave':
         return dropPeer(ws);
       case 'offer':
@@ -134,9 +136,7 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
     }
   }
 
-  function handleJoin(ws: WebSocket, roomId: string) {
-    const result = rooms.join(roomId, ws);
-
+  function handleJoin(ws: WebSocket, result: JoinResult<WebSocket>) {
     if (!result.ok) {
       if (result.code === 'room_full') {
         sendError(ws, 'room_full', 'This room already has two participants');
@@ -148,6 +148,7 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
     }
 
     const { peer, other } = result;
+    const roomId = peer.roomId;
     log.info({ roomId, peerId: peer.id, peers: rooms.roomSize(roomId) }, 'Peer joined');
 
     // Tell the existing peer first so its RTCPeerConnection exists (as the
@@ -166,7 +167,10 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
     });
   }
 
-  function relay(ws: WebSocket, msg: Exclude<ClientMessage, { type: 'join' | 'leave' }>) {
+  function relay(
+    ws: WebSocket,
+    msg: Extract<ClientMessage, { type: 'offer' | 'answer' | 'ice-candidate' }>,
+  ) {
     const peer = rooms.peerOf(ws);
     if (!peer) {
       sendError(ws, 'not_in_room', 'Join a room before sending signaling messages');
