@@ -3,9 +3,10 @@
   import { env } from '$env/dynamic/public';
   import { page } from '$app/state';
   import { resolve } from '$app/paths';
-  import { Badge88x31, NavBar, SiteShell, type NavItem } from '$lib/components/retro';
+  import { Badge88x31, Button, NavBar, SiteShell, type NavItem } from '$lib/components/retro';
+  import type { LayoutProps } from './$types';
 
-  let { children } = $props();
+  let { children, data }: LayoutProps = $props();
 
   const inRoom = $derived(page.url.pathname.startsWith('/room'));
 
@@ -17,7 +18,6 @@
           { href: '#what', label: 'what this is' },
           { href: '#how', label: 'how it works' },
           { href: '#room', label: 'the room' },
-          { href: '#parts', label: 'the parts bin' },
           { href: '#rules', label: 'house rules' },
         ]
       : [
@@ -38,16 +38,37 @@
 
 <SiteShell wide={inRoom}>
   {#snippet header()}
-    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-      <a href={resolve('/')} class="rt-logotype">
-        cigarettebuddy<span
-          class="ml-1 inline-block size-[0.3em] translate-y-[-0.05em] bg-ember align-baseline"
+    <div class="flex min-w-0 flex-col gap-0.5">
+      <a href={resolve('/')} class="rt-logotype flex items-center gap-2 text-paper">
+        <span class="truncate">
+          CigaretteBuddy<span class="text-ash">.com</span>
+        </span>
+        <!-- Rotated to lie flat: the source runs corner to corner, which at
+             this size reads as a smudge rather than a cigarette. -->
+        <img
+          src="/assets/cigarettes-png-22.png"
+          alt=""
           aria-hidden="true"
-        ></span>
+          width="44"
+          height="44"
+          class="h-[1.45em] w-auto flex-none scale-x-[-1]"
+        />
       </a>
-      <p class="rt-mono text-[0.8125rem] text-teal">two people, one break</p>
+      <p class="rt-mono text-[0.75rem] text-ash">{data.slogan}</p>
     </div>
-    <NavBar items={nav} current={inRoom ? resolve('/room') : ''} class="mt-2.5" />
+    <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+      <NavBar items={nav} current={inRoom ? resolve('/room') : ''} tone="paper" />
+      <!-- Flat on purpose: no offset shadow and no press travel, so it reads
+           as a plain block rather than the kit's raised buttons. Its ink border
+           disappears into the bar, which is what keeps it borderless. -->
+      <Button
+        variant="ember"
+        href={resolve('/room')}
+        class="shadow-none active:transform-none"
+      >
+        Find a Buddy
+      </Button>
+    </div>
   {/snippet}
 
   {@render children?.()}
