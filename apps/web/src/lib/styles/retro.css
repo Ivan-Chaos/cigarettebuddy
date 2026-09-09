@@ -1,0 +1,265 @@
+/* ---- The kit's recipe classes --------------------------------------------
+   These live in `@layer components`, so Tailwind utilities still beat them and
+   `<Panel class="bg-putty">` works. That is the opposite choice from
+   `shadcn-skin.css`, which sits in `@layer skin` *above* utilities because it
+   has to overpower styles baked into vendored files. Two files, two layers,
+   two different jobs.
+
+   Rule of thumb: if a consumer might want to override it, it belongs here or
+   in a utility. If it is a keyframe or a component's internal geometry, it
+   belongs in that component's scoped <style> block.
+   -------------------------------------------------------------------------- */
+
+@layer components {
+  /* ---- page scaffolding -------------------------------------------------- */
+
+  .rt-frame {
+    max-width: var(--container-site);
+    margin-inline: auto;
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-ink);
+    box-shadow: 4px 4px 0 0 var(--color-ink);
+  }
+
+  /* Below 40rem the frame goes edge to edge: a 4px offset shadow at the
+     viewport edge is what causes horizontal scroll on phones. */
+  @media (width < 40rem) {
+    .rt-frame {
+      border-inline: 0;
+      box-shadow: none;
+    }
+  }
+
+  .rt-skip {
+    position: absolute;
+    left: -9999px;
+    z-index: 100;
+  }
+  .rt-skip:focus {
+    left: 0.5rem;
+    top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background-color: var(--color-ink);
+    color: var(--color-paper);
+    text-decoration: none;
+  }
+
+  /* ---- surfaces ---------------------------------------------------------- */
+
+  .rt-panel {
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-ink);
+  }
+  .rt-panel--putty {
+    background-color: var(--color-putty);
+  }
+  .rt-panel--screen {
+    background-color: var(--color-screen);
+    color: var(--color-glow);
+  }
+
+  .rt-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.3rem 0.6rem;
+    background-color: var(--color-putty);
+    border-bottom: 1px solid var(--color-ink);
+  }
+
+  /* Coloured title strips. The panel body stays paper and the border stays ink,
+     so a page of these reads like a row of labelled folders rather than a
+     paint chart. Gold is light enough to keep ink text. */
+  .rt-strip--teal {
+    background-color: var(--color-teal);
+    color: var(--color-paper);
+  }
+  .rt-strip--berry {
+    background-color: var(--color-berry);
+    color: var(--color-paper);
+  }
+  .rt-strip--moss {
+    background-color: var(--color-moss);
+    color: var(--color-paper);
+  }
+  .rt-strip--ember {
+    background-color: var(--color-ember);
+    color: var(--color-paper);
+  }
+  .rt-strip--gold {
+    background-color: var(--color-gold);
+    color: var(--color-ink);
+  }
+
+  .rt-raise {
+    box-shadow: 3px 3px 0 0 var(--color-ink);
+  }
+  .rt-raise-sm {
+    box-shadow: 2px 2px 0 0 var(--color-ink);
+  }
+
+  /* The press: move into the shadow and drop it, so the thing looks pushed
+     flat against the page rather than merely nudged. */
+  .rt-press {
+    transition: none;
+  }
+  .rt-press:active:not(:disabled, [aria-disabled='true']) {
+    transform: translate(2px, 2px);
+    box-shadow: none;
+  }
+
+  .rt-inset {
+    box-shadow:
+      inset 1px 1px 0 0 color-mix(in srgb, var(--color-ink) 26%, transparent),
+      inset -1px -1px 0 0 color-mix(in srgb, var(--color-paper) 60%, transparent);
+  }
+
+  .rt-hairline {
+    border: 1px solid var(--color-ink);
+  }
+
+  /* ---- layout ------------------------------------------------------------ */
+
+  .rt-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.75rem;
+    align-items: start;
+  }
+  /* 60rem matches the breakpoint the old .room-layout used, so existing users
+     get no reflow surprise. DOM order is main-then-rail, so the stacked case
+     needs no `order` shuffling and tab order stays correct for free. */
+  @media (width >= 60rem) {
+    .rt-columns {
+      grid-template-columns: minmax(0, 1fr) var(--spacing-rail);
+    }
+  }
+
+  .rt-stage {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .rt-videogrid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @media (width >= 40rem) {
+    .rt-videogrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  .rt-buttonrow {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+  }
+
+  .rt-measure {
+    max-width: 66ch;
+  }
+
+  /* ---- type -------------------------------------------------------------- */
+
+  .rt-mono {
+    font-family: var(--font-mono);
+  }
+  .rt-pixel {
+    font-family: var(--font-pixel);
+    letter-spacing: 0.06em;
+  }
+
+  .rt-logotype {
+    font-family: var(--font-serif);
+    font-size: clamp(1.75rem, 6vw, 2.125rem);
+    line-height: 1;
+    color: var(--color-ink);
+    text-decoration: none;
+  }
+  .rt-logotype:hover {
+    color: var(--color-ink);
+  }
+
+  /* ---- data -------------------------------------------------------------- */
+
+  .rt-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  .rt-table th,
+  .rt-table td {
+    border: 1px solid var(--color-ink);
+    padding: 0.3rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .rt-table th {
+    background-color: var(--color-putty);
+    font-family: var(--font-mono);
+    font-weight: 400;
+  }
+  .rt-table tbody tr:nth-child(even) td {
+    background-color: color-mix(in srgb, var(--color-putty) 45%, var(--color-panel));
+  }
+
+  .rt-quote {
+    border-left: 3px solid var(--color-ink);
+    padding-left: 0.85rem;
+    font-family: var(--font-serif);
+    font-style: italic;
+  }
+
+  /* ---- controls ---------------------------------------------------------- */
+
+  /* Native box, ember mark, no SVG and no library. */
+  .rt-check {
+    appearance: none;
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-ink);
+    display: grid;
+    place-content: center;
+  }
+  .rt-check:checked::after {
+    content: '';
+    width: 0.55rem;
+    height: 0.55rem;
+    background-color: var(--color-ember);
+  }
+  .rt-check:disabled {
+    background-color: var(--color-putty);
+    opacity: 0.6;
+  }
+
+  /* ---- old web ----------------------------------------------------------- */
+
+  .rt-badgewall {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  /* A specimen cell in the parts bin. */
+  .rt-specimen {
+    border: 1px solid color-mix(in srgb, var(--color-ink) 35%, transparent);
+    background-color: color-mix(in srgb, var(--color-putty) 30%, var(--color-panel));
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+  .rt-specimen > figcaption {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--color-ink-soft);
+    margin-top: auto;
+  }
+}
