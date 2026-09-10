@@ -10,10 +10,20 @@
 
   const inRoom = $derived(page.url.pathname.startsWith('/room'));
 
+  /* The landing page composes its own full-bleed bands, so it opts out of the
+     bordered sheet and supplies one itself for the sections not yet converted.
+     Keyed off the route rather than the path, and gated on `page.error`: when
+     the root page's load throws, SvelteKit renders +error.svelte into these
+     same children with the pathname still `/`, and an unframed error page is
+     an unpadded Notice bleeding to the viewport edge. */
+  const isLanding = $derived(page.route.id === '/' && !page.error);
+
   // Route-aware so the in-page anchors never show up on a page that has no
-  // such sections. Every link here points at something that exists.
+  // such sections. Every link here points at something that exists -- which is
+  // why this reuses `isLanding` rather than testing the path: an error on `/`
+  // renders none of these sections.
   const nav = $derived<NavItem[]>(
-    page.url.pathname === '/'
+    isLanding
       ? [
           { href: '#what', label: 'what this is' },
           { href: '#how', label: 'how it works' },
@@ -36,15 +46,15 @@
   <meta name="theme-color" content="#f2eada" />
 </svelte:head>
 
-<SiteShell wide={inRoom}>
+<SiteShell wide={inRoom} framed={!isLanding}>
   {#snippet header()}
     <div class="flex min-w-0 flex-col gap-0.5">
       <a href={resolve('/')} class="rt-logotype flex items-center gap-2 text-paper">
         <span class="truncate">
           CigaretteBuddy<span class="text-ash">.com</span>
         </span>
-        <!-- Rotated to lie flat: the source runs corner to corner, which at
-             this size reads as a smudge rather than a cigarette. -->
+        <!-- Mirrored so the lit end points away from the wordmark rather than
+             into it. -->
         <img
           src="/assets/cigarettes-png-22.png"
           alt=""
@@ -61,11 +71,7 @@
       <!-- Flat on purpose: no offset shadow and no press travel, so it reads
            as a plain block rather than the kit's raised buttons. Its ink border
            disappears into the bar, which is what keeps it borderless. -->
-      <Button
-        variant="ember"
-        href={resolve('/room')}
-        class="shadow-none active:transform-none"
-      >
+      <Button variant="ember" href={resolve('/room')} class="shadow-none active:transform-none">
         Find a Buddy
       </Button>
     </div>

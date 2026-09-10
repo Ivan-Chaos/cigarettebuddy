@@ -9,6 +9,8 @@
 
 // Structure
 export { default as SiteShell } from './SiteShell.svelte';
+export { default as Band, bandVariants } from './Band.svelte';
+export type { BandTone } from './Band.svelte';
 export { default as NavBar } from './NavBar.svelte';
 export type { NavItem } from './NavBar.svelte';
 export { default as Panel, panelVariants, stripVariants } from './Panel.svelte';

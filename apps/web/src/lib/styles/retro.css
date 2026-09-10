@@ -42,12 +42,61 @@
     max-width: 76rem;
   }
 
+  /* A full-bleed band -- the same trick as .rt-topbar, generalised. The outer
+     element is a plain block with no width constraint (never `100vw`, which
+     overflows by the scrollbar's width), and the inner row is capped at the
+     frame's width so band content lines up with the header row above it. */
+  .rt-band {
+    display: block;
+  }
+  .rt-band--divide {
+    border-bottom: 1px solid var(--color-ink);
+  }
+
+  .rt-band__inner {
+    max-width: var(--container-site);
+    margin-inline: auto;
+    padding: 2rem 1rem;
+  }
+  @media (width >= 40rem) {
+    .rt-band__inner {
+      padding: 3rem 1.5rem;
+    }
+  }
+  .rt-band__inner--wide {
+    max-width: 76rem;
+  }
+
+  /* Hero headline. The global h1 is a fixed 2.75rem, which carries a column
+     inside the sheet but is too small to hold a full-width band. The vw term
+     is deliberately modest: this sits in a ~600px column beside an image, not
+     across the whole band, so a larger one wraps to five ragged lines. */
+  .rt-display {
+    font-size: clamp(2.25rem, 4.2vw, 3.5rem);
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+  }
+
   .rt-frame {
     max-width: var(--container-site);
     margin-inline: auto;
     background-color: var(--color-panel);
     border: 1px solid var(--color-ink);
     box-shadow: 4px 4px 0 0 var(--color-ink);
+  }
+
+  /* The frame's insets, named rather than inlined: both the shell's <main>
+     and an unframed page's own sheet have to carry them, and two copies of a
+     four-utility responsive string is how they drift apart. */
+  .rt-frame__body {
+    padding-block: 1.5rem;
+    padding-inline: 1rem;
+  }
+  @media (width >= 40rem) {
+    .rt-frame__body {
+      padding-block: 2rem;
+      padding-inline: 1.5rem;
+    }
   }
 
   /* Below 40rem the frame goes edge to edge: a 4px offset shadow at the
