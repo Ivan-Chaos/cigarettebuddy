@@ -233,12 +233,32 @@ accounts, no database: rooms live in the API's memory and vanish when empty.
   which asks the server for a random match: any room that currently has one
   person in it (picked at random when several qualify), or a fresh room when
   none is open. Once assigned, the URL is rewritten to `/room/<id>`.
-- `/room/<id>` joins that specific room, so links stay shareable and a refresh
-  puts you back with your peer. Ids are 4–32 chars of `a-z`, `0-9` and `-`
+- `/room/<id>` rejoins that specific room, so a refresh puts you back with your
+  peer. Rooms are not meant to be shared and the UI offers no link, but a
+  direct URL still works. Ids are 4–32 chars of `a-z`, `0-9` and `-`
   (`roomIdSchema` in `packages/shared`). A third visitor is turned away with
   "room full".
-- Rooms are matched purely by occupancy: someone waiting in a room you opened
-  from a shared link is just as matchable as someone who clicked **Join room**.
+- Rooms are matched purely by occupancy: anyone waiting alone in a room is
+  matchable, however they got there.
+- A pairing is one cigarette: ten minutes (`CHAT_DURATION_MS` in
+  `packages/shared`) from the moment the room fills. The server owns the
+  clock and sends both peers `timer { remainingMs, lit, wantsAnother }`
+  whenever it changes; clients count down from `remainingMs` on their own
+  clock, so skew never matters.
+- **Light another one** is a vote. Once _both_ peers have voted the clock
+  resets to ten minutes, `lit` goes up by one and the ashtray shows another
+  butt. A peer leaving clears the clock and the votes.
+- When the clock hits zero the server sends `expired` to both, closes the
+  sockets with code `4004` and deletes the room. Each side keeps its camera and
+  gets a **Next one** button.
+- **Next one** leaves and asks for a random match again, sending the room just
+  left as `avoidRoomId` so you are never re-seated with the same person. The id
+  comes from `localStorage["cb:last-room"]`, which is written on every join and
+  every exit. It is best-effort: it stops _you_ re-entering the room _you_
+  left, not the survivor being matched into the fresh room you moved to.
+- **Leave and report** sends `report` before leaving. For now the API only
+  logs `{ roomId, reporterId, reportedId }`; nothing is stored.
+- A refresh is a leave and a join, so the cigarette starts over.
 - Chat messages travel peer to peer over the data channel, so they never touch
   the server and only work once the two browsers are connected.
 - Camera access requires `localhost` or HTTPS — plain `http://` on a LAN IP will
@@ -252,9 +272,10 @@ thread, so two people clicking at the same moment end up together rather than
 in two half-empty rooms. The peer already in the room is the _polite_ side; the
 newcomer initiates the offer and creates the chat channel. Negotiation follows
 the spec's "perfect negotiation" pattern, so glare resolves itself and a
-survivor becomes polite again when a new peer arrives. The server only relays
-`offer`, `answer` and `ice-candidate` messages verbatim; the message shapes
-are the Zod schemas in `packages/shared/src/signaling.ts`.
+survivor becomes polite again when a new peer arrives. The server relays
+`offer`, `answer` and `ice-candidate` messages verbatim, and on top of that
+speaks `timer` / `expired` (its clock) and accepts `light-another` / `report`;
+the message shapes are the Zod schemas in `packages/shared/src/signaling.ts`.
 
 **TURN.** Peers behind symmetric NAT need a relay. Point the API at yours with
 the `STUN_URLS` / `TURN_*` variables in the root `.env` (see `.env.example`).
@@ -280,11 +301,16 @@ browsers receive, and `chrome://webrtc-internals` will show a `relay`
 candidate pair once the TURN server is actually in use.
 
 **Trying it.** Run `pnpm dev`, open http://localhost:5173 in two tabs (or two
-browsers) and click **Join room** in both. They land in the same `/room/<id>`,
-both videos should appear and chat should flow both ways. A third tab clicking
-**Join room** gets a fresh room; pasting the first room's URL into it instead
-shows "room full". Closing one tab puts the other back into "waiting", where
-the next **Join room** click can be matched to it.
+browsers) and click **Find a Buddy** in both. They land in the same
+`/room/<id>`, both videos should appear, chat should flow both ways and the
+cigarette should start burning down from 10:00. Click **Light another one** in
+one tab and the other lights up with "They want another one"; click it there
+too and both clocks reset with one butt in the ashtray. A third tab clicking
+**Find a Buddy** gets a fresh room; pasting the first room's URL into it
+instead shows "room full". **Next one** in one tab puts the other back into
+"waiting" and seats the first somewhere else. To watch a cigarette burn out
+without waiting, pass a short `chatDurationMs` to `attachSignaling` in
+`apps/api/src/index.ts`.
 
 **Known limitation.** A browser that vanishes without closing its socket
 (network drop, killed process) keeps its seat until the WebSocket heartbeat

@@ -54,7 +54,7 @@
     },
     {
       title: 'One of you goes back in',
-      body: 'Hang up and you are back here. If they leave first you stay put, and the next person out gets matched to you.',
+      body: 'A cigarette is ten minutes. If you both light another one you get ten more; if not, that is the break. Hit next and you are with somebody else. If they leave first you stay put, and the next person out gets matched to you.',
     },
   ];
 
@@ -63,7 +63,7 @@
   const rules: { title: string; body: string }[] = [
     {
       title: "don't be a cunt",
-      body: 'you are on video with a stranger who has done nothing to you. no slurs, no shouting, no getting weird. and if someone is being one at you, hang up. you owe them nothing and there is another one along in about four seconds.',
+      body: 'you are on video with a stranger who has done nothing to you. no slurs, no shouting, no getting weird. and if someone is being one at you, hit next, or leave and report them. you owe them nothing and there is another one along in about four seconds.',
     },
     {
       title: 'be old enough',
@@ -111,7 +111,7 @@
     },
     {
       q: 'what if i get a weirdo?',
-      a: 'hang up. that is the whole procedure. you owe a stranger nothing and there is another one along in about four seconds.',
+      a: 'hit next, or leave and report them. that is the whole procedure. you owe a stranger nothing and there is another one along in about four seconds.',
     },
     {
       q: 'can i pick who i get?',
@@ -471,7 +471,8 @@
          cigarette and renders identically on the server and the client. -->
     <CigaretteTimer progress={0.32} />
     <p class="mt-2 text-xs text-ink-soft">
-      About seven minutes, which is a decent length for a conversation with a stranger.
+      Ten minutes, which is a decent length for a conversation with a stranger. Light another one
+      together if it is going well.
     </p>
   </Panel>
 

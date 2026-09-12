@@ -298,7 +298,6 @@
         </figure>
         <figure class="rt-specimen">
           <div class="rt-badgewall">
-            <Badge88x31 title="Made in Svelte" label="MADE IN" sublabel="SVELTE" tone="berry" />
             <Badge88x31 title="No cookies" label="NO" sublabel="COOKIES" tone="ember" />
             <Badge88x31
               title="Best viewed outside"

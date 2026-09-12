@@ -87,7 +87,6 @@
         <p class="text-ink-soft">no cookies, no accounts, no analytics, no idea who you'll get.</p>
       </div>
       <div class="rt-badgewall">
-        <Badge88x31 title="Made in Svelte" label="MADE IN" sublabel="SVELTE" tone="berry" />
         <Badge88x31 title="No cookies" label="NO" sublabel="COOKIES" tone="ember" />
         <Badge88x31 title="Peer to peer" label="PEER 2 PEER" tone="teal" />
         <Badge88x31

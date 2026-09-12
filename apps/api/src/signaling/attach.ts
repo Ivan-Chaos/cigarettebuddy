@@ -20,6 +20,8 @@ export interface SignalingOptions {
   /** When set, upgrades whose Origin is not listed are refused with 403. */
   allowedOrigins?: string[];
   heartbeatMs?: number;
+  /** Length of one cigarette. Defaults to `CHAT_DURATION_MS`; tests shorten it. */
+  chatDurationMs?: number;
 }
 
 export interface Signaling {
@@ -47,8 +49,10 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
   const log = logger.child({ module: 'signaling' });
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
-  const rooms = new RoomManager<WebSocket>();
+  const rooms = new RoomManager<WebSocket>({ durationMs: options.chatDurationMs });
   const states = new WeakMap<WebSocket, ConnState>();
+  /** One pending expiry per full room. `RoomManager` holds the deadline as data. */
+  const timers = new Map<string, NodeJS.Timeout>();
 
   function onUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer) {
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -126,9 +130,13 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
       case 'join':
         return handleJoin(ws, rooms.join(msg.roomId, ws));
       case 'join-random':
-        return handleJoin(ws, rooms.joinRandom(ws));
+        return handleJoin(ws, rooms.joinRandom(ws, undefined, msg.avoidRoomId));
       case 'leave':
         return dropPeer(ws);
+      case 'light-another':
+        return handleVote(ws);
+      case 'report':
+        return handleReport(ws);
       case 'offer':
       case 'answer':
       case 'ice-candidate':
@@ -165,6 +173,77 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
       peerPresent: other !== null,
       iceServers: iceServers(),
     });
+
+    // After `joined`, so the newcomer knows its own peer id when it reads
+    // `wantsAnother`. Frames on one socket arrive in order.
+    if (other) syncTimer(roomId);
+  }
+
+  /**
+   * Re-arms the expiry for a room and tells both peers the clock. A room with
+   * a free seat has no clock, so this just clears any leftover timeout.
+   */
+  function syncTimer(roomId: string) {
+    const pending = timers.get(roomId);
+    if (pending) {
+      clearTimeout(pending);
+      timers.delete(roomId);
+    }
+
+    const state = rooms.timerState(roomId);
+    if (!state) return;
+
+    timers.set(
+      roomId,
+      setTimeout(() => expire(roomId), state.remainingMs),
+    );
+    for (const peer of rooms.peersOf(roomId)) {
+      send(peer.conn, { type: 'timer', ...state });
+    }
+  }
+
+  function expire(roomId: string) {
+    timers.delete(roomId);
+    const peers = rooms.expire(roomId);
+    if (peers.length === 0) return;
+
+    log.info({ roomId, peers: peers.length }, 'Room expired');
+    for (const peer of peers) {
+      send(peer.conn, { type: 'expired' });
+      peer.conn.close(SIGNALING_CLOSE_CODES.expired, 'break over');
+    }
+  }
+
+  function handleVote(ws: WebSocket) {
+    const result = rooms.vote(ws);
+    if (!result.ok) {
+      if (result.code === 'not_in_room') {
+        sendError(ws, 'not_in_room', 'Join a room before lighting another one');
+      } else {
+        // Alone, or the room drained between click and arrival. Nothing to do.
+        log.debug({ peerId: rooms.peerOf(ws)?.id }, 'Ignored vote in a room that is not burning');
+      }
+      return;
+    }
+
+    const roomId = rooms.peerOf(ws)?.roomId;
+    if (!roomId) return;
+    if (result.relit) log.info({ roomId, lit: result.state.lit }, 'Relit');
+    syncTimer(roomId);
+  }
+
+  /** Nothing is stored yet; the log line is the whole report. */
+  function handleReport(ws: WebSocket) {
+    const peer = rooms.peerOf(ws);
+    if (!peer) {
+      sendError(ws, 'not_in_room', 'Join a room before reporting anyone');
+      return;
+    }
+
+    log.warn(
+      { roomId: peer.roomId, reporterId: peer.id, reportedId: rooms.otherPeer(ws)?.id ?? null },
+      'Peer reported',
+    );
   }
 
   function relay(
@@ -191,6 +270,9 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
     if (!left) return;
 
     log.info({ roomId: left.peer.roomId, peerId: left.peer.id }, 'Peer left');
+    // The room now has a free seat, so it has no clock: this only clears the
+    // pending expiry. The survivor hears `peer-left`, which says enough.
+    syncTimer(left.peer.roomId);
     if (left.other) {
       send(left.other.conn, { type: 'peer-left', peerId: left.peer.id });
     }
@@ -224,6 +306,8 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
     roomCount: () => rooms.roomCount(),
     close() {
       clearInterval(heartbeat);
+      for (const pending of timers.values()) clearTimeout(pending);
+      timers.clear();
       server.off('upgrade', onUpgrade);
       for (const ws of wss.clients) {
         ws.close(1001, 'server shutting down');
