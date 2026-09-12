@@ -210,7 +210,7 @@ whose `Origin` is listed in `CORS_ORIGIN` when running in production).
 | ------ | ------------------- | ------------------------------------------------ |
 | GET    | `/api/health/live`  | Liveness — process only                          |
 | GET    | `/api/health/ready` | Readiness — also pings Postgres, 503 if down     |
-| GET    | `/api/ice`          | ICE servers browsers get, for debugging TURN     |
+| GET    | `/api/ice`          | ICE servers browsers get; dev only               |
 | WS     | `/api/ws`           | Room signaling — see [Video rooms](#video-rooms) |
 
 That is the whole surface: nothing is stored yet, so there are no resource
@@ -291,10 +291,30 @@ static-auth-secret=some-long-secret
 
 With a shared secret the API mints a fresh `expiry:user` / HMAC-SHA1 credential
 for every peer that joins (`apps/api/src/ice.ts`), valid for
-`TURN_TTL_SECONDS`. Keep that longer than your longest call — coturn checks
-the expiry again on allocation refresh. `GET /api/ice` shows exactly what
-browsers receive, and `chrome://webrtc-internals` will show a `relay`
-candidate pair once the TURN server is actually in use.
+`TURN_TTL_SECONDS` (default one hour). Keep that longer than your longest
+call — coturn checks the expiry again on allocation refresh. `GET /api/ice`
+shows exactly what browsers receive (outside production), and
+`chrome://webrtc-internals` will show a `relay` candidate pair once the TURN
+server is actually in use.
+
+**Keeping the relay to yourself.** Browsers have to receive working TURN
+credentials, so anyone who joins a room can copy them; the aim is to make a
+copy worthless. The API hands credentials out only on a room join (the
+`/api/ice` route is disabled in production), each one dies after the TTL, and
+joins are capped per address. On the coturn side, refuse to relay into private
+networks and cap usage in `turnserver.conf`:
+
+```ini
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=100.64.0.0-100.127.255.255
+user-quota=12
+total-quota=1200
+max-bps=3000000
+```
 
 **Trying it.** Run `pnpm dev`, open http://localhost:5173 in two tabs (or two
 browsers) and click **Find a Buddy** in both. They land in the same

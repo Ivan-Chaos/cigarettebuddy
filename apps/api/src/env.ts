@@ -35,7 +35,7 @@ const envSchema = z
     TURN_CREDENTIAL: optionalString,
     // ... or a shared secret (coturn use-auth-secret); wins when both are set.
     TURN_SECRET: optionalString,
-    TURN_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),
+    TURN_TTL_SECONDS: z.coerce.number().int().positive().default(3_600),
   })
   .refine(
     (value) =>
