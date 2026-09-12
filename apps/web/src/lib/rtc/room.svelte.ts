@@ -6,12 +6,21 @@ import {
   type IceServer,
   type ServerMessage,
 } from '@cigbuddy/shared';
+import { readLastRoom, writeLastRoom } from '$lib/storage';
 import { nowIso } from './clock';
 import { createPeer, type PeerHandle } from './peer';
 import { SignalingClient, resolveSignalingUrl } from './signaling';
 
 export type RoomStatus =
-  'idle' | 'media' | 'connecting' | 'waiting' | 'negotiating' | 'connected' | 'full' | 'error';
+  | 'idle'
+  | 'media'
+  | 'connecting'
+  | 'waiting'
+  | 'negotiating'
+  | 'connected'
+  | 'full'
+  | 'expired'
+  | 'error';
 
 export interface ChatEntry {
   id: string;
@@ -27,8 +36,18 @@ export interface ChatEntry {
  */
 export class RoomSession {
   roomId = $state('');
+  peerId = $state('');
   status = $state<RoomStatus>('idle');
   error = $state<string | null>(null);
+
+  /** When the current cigarette burns out, on this browser's clock. Null until paired. */
+  deadline = $state<number | null>(null);
+  /** Cigarettes finished with this peer, i.e. how many times both lit another. */
+  lit = $state(0);
+  /** Peer ids that have voted to light another one this cigarette. */
+  wantsAnother = $state<string[]>([]);
+  iWantAnother = $derived(this.wantsAnother.includes(this.peerId));
+  theyWantAnother = $derived(this.wantsAnother.some((id) => id !== this.peerId));
 
   localStream = $state.raw<MediaStream | null>(null);
   remoteStream = $state.raw<MediaStream | null>(null);
@@ -61,16 +80,38 @@ export class RoomSession {
     await this.open({ type: 'join', roomId });
   }
 
-  /** Lets the server pick a room with a free seat (or open a fresh one). */
+  /**
+   * Lets the server pick a room with a free seat (or open a fresh one), never
+   * the room this browser was last in.
+   */
   async joinRandom(): Promise<void> {
     this.roomId = '';
-    await this.open({ type: 'join-random' });
+    await this.open({ type: 'join-random', avoidRoomId: readLastRoom() ?? undefined });
   }
 
   /** Drops the peer and socket but keeps the camera, then joins again. */
   async rejoin(): Promise<void> {
     this.leaveRoom();
     await (this.roomId ? this.join(this.roomId) : this.joinRandom());
+  }
+
+  /** Leaves whoever this is and finds somebody else. The camera stays on. */
+  async next(): Promise<void> {
+    this.leaveRoom();
+    this.messages = [];
+    await this.joinRandom();
+  }
+
+  /** Votes to reset the clock. The room relights once the other side votes too. */
+  lightAnother(): void {
+    if (this.status !== 'connected' || this.iWantAnother) return;
+    this.signaling?.send({ type: 'light-another' });
+  }
+
+  /** Flags the other person, then leaves. Same socket, so the report goes first. */
+  report(): void {
+    this.signaling?.send({ type: 'report' });
+    this.destroy();
   }
 
   private async open(
@@ -146,11 +187,7 @@ export class RoomSession {
     return this.switchInput('video', deviceId);
   }
 
-  hangUp(): void {
-    this.destroy();
-  }
-
-  /** Idempotent. Safe to call from beforeunload, onMount cleanup and hangUp. */
+  /** Idempotent. Safe to call from beforeunload, onMount cleanup and leave. */
   destroy(): void {
     this.destroyed = true;
     this.leaveRoom();
@@ -261,7 +298,11 @@ export class RoomSession {
     switch (message.type) {
       case 'joined':
         this.roomId = message.roomId;
+        this.peerId = message.peerId;
         this.iceServers = message.iceServers;
+        // Remembered straight away, so even a crash cannot match us back here.
+        writeLastRoom(message.roomId);
+        this.clearBurn();
         if (message.peerPresent) {
           this.startPeer(false);
         } else {
@@ -277,7 +318,26 @@ export class RoomSession {
       case 'peer-left':
         this.system('Your peer left.');
         this.teardownPeer();
+        this.clearBurn();
         this.status = 'waiting';
+        return;
+
+      case 'timer': {
+        const prevLit = this.lit;
+        const prevThey = this.theyWantAnother;
+        // Local deadline from the remaining time, so clock skew never matters.
+        this.deadline = Date.now() + message.remainingMs;
+        this.lit = message.lit;
+        this.wantsAnother = message.wantsAnother;
+        if (message.lit > prevLit) this.system('Lit another one.');
+        else if (this.theyWantAnother && !prevThey) this.system('They want another one.');
+        return;
+      }
+
+      case 'expired':
+        this.system("That's the break.");
+        this.leaveRoom();
+        this.status = 'expired';
         return;
 
       case 'offer':
@@ -304,6 +364,14 @@ export class RoomSession {
   private onSignalingClosed(client: SignalingClient, code: number): void {
     if (client !== this.signaling || this.destroyed) return;
     if (code === SIGNALING_CLOSE_CODES.roomFull || this.status === 'full') return;
+    // Normally the `expired` frame got here first; this is the fallback.
+    if (code === SIGNALING_CLOSE_CODES.expired || this.status === 'expired') {
+      if (this.status !== 'expired') {
+        this.leaveRoom();
+        this.status = 'expired';
+      }
+      return;
+    }
     this.teardownPeer();
     this.fail('Connection to the server was lost.');
   }
@@ -341,7 +409,10 @@ export class RoomSession {
     this.connectionState = 'none';
   }
 
+  /** Every way out of a room goes through here: destroy, rejoin, next, expiry. */
   private leaveRoom(): void {
+    if (this.roomId) writeLastRoom(this.roomId);
+    this.clearBurn();
     this.teardownPeer();
     const signaling = this.signaling;
     this.signaling = null;
@@ -349,6 +420,12 @@ export class RoomSession {
       signaling.send({ type: 'leave' });
       signaling.close();
     }
+  }
+
+  private clearBurn(): void {
+    this.deadline = null;
+    this.lit = 0;
+    this.wantsAnother = [];
   }
 
   private attachChat(channel: RTCDataChannel): void {

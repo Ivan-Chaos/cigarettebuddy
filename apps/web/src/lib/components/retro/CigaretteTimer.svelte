@@ -1,14 +1,17 @@
 <script lang="ts">
+  import { CHAT_DURATION_MS } from '@cigbuddy/shared';
   import { cn } from '$lib/utils';
 
   interface Props {
     /** When the clock started. Null renders a full, unlit cigarette. */
     startedAt?: Date | number | null;
-    /** Length of a whole cigarette. Seven minutes, which is about right. */
+    /** Length of a whole cigarette. One room's worth by default. */
     durationMs?: number;
     running?: boolean;
     /** Off when the cigarette is an illustration rather than a live clock. */
     showClock?: boolean;
+    /** Show what is left rather than what has burned. The drawing is the same. */
+    countdown?: boolean;
     /** A fixed burn from 0 to 1, for drawing a lit cigarette that is not a
      *  clock. Wins over `startedAt`, and renders no time. Use this rather than
      *  a backdated `startedAt`: server and client would compute different
@@ -20,9 +23,10 @@
 
   let {
     startedAt = null,
-    durationMs = 7 * 60 * 1000,
+    durationMs = CHAT_DURATION_MS,
     running = true,
     showClock = true,
+    countdown = false,
     progress,
     label,
     class: className,
@@ -51,7 +55,9 @@
   const paperW = $derived(128 * (1 - ratio));
 
   const clock = $derived.by(() => {
-    const total = Math.floor(elapsed / 1000);
+    const shownMs = countdown ? Math.max(0, durationMs - elapsed) : elapsed;
+    // Ceil on the way down so the display reads 10:00 at the start, 0:00 at the end.
+    const total = countdown ? Math.ceil(shownMs / 1000) : Math.floor(shownMs / 1000);
     return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
   });
 </script>

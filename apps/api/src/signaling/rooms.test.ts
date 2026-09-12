@@ -185,4 +185,150 @@ describe('RoomManager.joinRandom', () => {
     expect(result.peer.roomId).toBe(joinedA.peer.roomId);
     expect(result.other?.id).toBe('peer-a');
   });
+
+  it('opens a fresh room rather than the avoided one, even when it is the only open room', () => {
+    const rooms = new RoomManager<Conn>({ pick: first });
+    rooms.join('just-left', { name: 'a' });
+
+    const result = rooms.joinRandom({ name: 'b' }, 'peer-b', 'just-left');
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.peer.roomId).not.toBe('just-left');
+    expect(result.other).toBeNull();
+    expect(rooms.roomCount()).toBe(2);
+  });
+
+  it('still matches into another open room when one is avoided', () => {
+    const rooms = new RoomManager<Conn>({ pick: first });
+    rooms.join('just-left', { name: 'a' });
+    rooms.join('elsewhere', { name: 'b' });
+
+    const result = rooms.joinRandom({ name: 'c' }, 'peer-c', 'just-left');
+
+    expect(result.ok && result.peer.roomId).toBe('elsewhere');
+  });
+
+  it('lets a direct join into the avoided room through', () => {
+    const rooms = new RoomManager<Conn>();
+    rooms.join('just-left', { name: 'a' });
+
+    expect(rooms.join('just-left', { name: 'b' }).ok).toBe(true);
+  });
+});
+
+describe('RoomManager clock', () => {
+  const DURATION = 1000;
+
+  function clocked() {
+    const clock = { t: 10_000 };
+    const rooms = new RoomManager<Conn>({ now: () => clock.t, durationMs: DURATION });
+    return { rooms, clock };
+  }
+
+  it('has no clock while one seat is free', () => {
+    const { rooms } = clocked();
+    rooms.join('room-1', { name: 'a' });
+
+    expect(rooms.timerState('room-1')).toBeNull();
+    expect(rooms.timerState('nowhere')).toBeNull();
+  });
+
+  it('starts a full cigarette when the room fills', () => {
+    const { rooms } = clocked();
+    rooms.join('room-1', { name: 'a' });
+    rooms.join('room-1', { name: 'b' });
+
+    expect(rooms.timerState('room-1')).toEqual({
+      remainingMs: DURATION,
+      lit: 0,
+      wantsAnother: [],
+    });
+  });
+
+  it('burns down and clamps at zero', () => {
+    const { rooms, clock } = clocked();
+    rooms.join('room-1', { name: 'a' });
+    rooms.join('room-1', { name: 'b' });
+
+    clock.t += 400;
+    expect(rooms.timerState('room-1')?.remainingMs).toBe(600);
+    clock.t += 5000;
+    expect(rooms.timerState('room-1')?.remainingMs).toBe(0);
+  });
+
+  it('refuses votes from strangers and from people who are alone', () => {
+    const { rooms } = clocked();
+    const a = { name: 'a' };
+    rooms.join('room-1', a);
+
+    expect(rooms.vote({ name: 'ghost' })).toEqual({ ok: false, code: 'not_in_room' });
+    expect(rooms.vote(a)).toEqual({ ok: false, code: 'not_burning' });
+  });
+
+  it('needs both votes to relight, and voting twice does nothing', () => {
+    const { rooms, clock } = clocked();
+    const a = { name: 'a' };
+    const b = { name: 'b' };
+    rooms.join('room-1', a, 'peer-a');
+    rooms.join('room-1', b, 'peer-b');
+    clock.t += 300;
+
+    expect(rooms.vote(a)).toEqual({
+      ok: true,
+      relit: false,
+      state: { remainingMs: 700, lit: 0, wantsAnother: ['peer-a'] },
+    });
+    expect(rooms.vote(a)).toEqual({
+      ok: true,
+      relit: false,
+      state: { remainingMs: 700, lit: 0, wantsAnother: ['peer-a'] },
+    });
+
+    expect(rooms.vote(b)).toEqual({
+      ok: true,
+      relit: true,
+      state: { remainingMs: DURATION, lit: 1, wantsAnother: [] },
+    });
+    expect(rooms.timerState('room-1')?.lit).toBe(1);
+  });
+
+  it('drops the clock and the votes when a peer leaves, and starts over on refill', () => {
+    const { rooms } = clocked();
+    const a = { name: 'a' };
+    const b = { name: 'b' };
+    rooms.join('room-1', a, 'peer-a');
+    rooms.join('room-1', b, 'peer-b');
+    rooms.vote(a);
+    rooms.vote(b);
+    rooms.vote(a);
+    rooms.leave(b);
+
+    expect(rooms.timerState('room-1')).toBeNull();
+    expect(rooms.vote(a)).toEqual({ ok: false, code: 'not_burning' });
+
+    rooms.join('room-1', { name: 'c' }, 'peer-c');
+    expect(rooms.timerState('room-1')).toEqual({
+      remainingMs: DURATION,
+      lit: 0,
+      wantsAnother: [],
+    });
+  });
+
+  it('expire forgets both peers and the room', () => {
+    const { rooms } = clocked();
+    const a = { name: 'a' };
+    const b = { name: 'b' };
+    rooms.join('room-1', a, 'peer-a');
+    rooms.join('room-1', b, 'peer-b');
+
+    const gone = rooms.expire('room-1');
+
+    expect(gone.map((p) => p.id).sort()).toEqual(['peer-a', 'peer-b']);
+    expect(rooms.roomCount()).toBe(0);
+    expect(rooms.peerOf(a)).toBeUndefined();
+    expect(rooms.peerOf(b)).toBeUndefined();
+    expect(rooms.leave(a)).toBeNull();
+    expect(rooms.expire('room-1')).toEqual([]);
+  });
 });

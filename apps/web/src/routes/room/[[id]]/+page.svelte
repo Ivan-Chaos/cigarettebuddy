@@ -1,14 +1,16 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import MicIcon from '@lucide/svelte/icons/mic';
   import MicOffIcon from '@lucide/svelte/icons/mic-off';
   import VideoIcon from '@lucide/svelte/icons/video';
   import VideoOffIcon from '@lucide/svelte/icons/video-off';
+  import { CHAT_DURATION_MS } from '@cigbuddy/shared';
   import ChatPanel from '$lib/components/ChatPanel.svelte';
   import DeviceControl from '$lib/components/DeviceControl.svelte';
   import {
+    AshtrayMeter,
     Button,
     CigaretteTimer,
     Link,
@@ -23,7 +25,6 @@
   let { data }: { data: PageData } = $props();
 
   const room = new RoomSession();
-  let copied = $state(false);
 
   const STATUS_TEXT: Record<RoomStatus, string> = {
     idle: 'Not connected',
@@ -33,6 +34,7 @@
     negotiating: 'Handshaking with your buddy',
     connected: 'Connected',
     full: 'This room is full',
+    expired: "That's the break",
     error: 'Disconnected',
   };
 
@@ -42,28 +44,22 @@
   const statusTone = $derived(
     room.status === 'connected'
       ? 'ok'
-      : room.status === 'error' || room.status === 'full'
+      : room.status === 'error' || room.status === 'full' || room.status === 'expired'
         ? 'bad'
         : 'pending',
   );
 
-  // Derived from the session rather than `location.href`, which still reads
-  // `/room` in the same flush that a random match assigns the id.
-  const shareUrl = $derived(
-    room.roomId ? new URL(resolve('/room/[[id]]', { id: room.roomId }), location.href).href : '',
-  );
+  // The clock is the server's; `deadline` is its end on this browser's clock.
+  // CigaretteTimer wants a start, so work back one cigarette from the end.
+  const litAt = $derived(room.deadline === null ? null : room.deadline - CHAT_DURATION_MS);
 
-  // The call clock. RoomSession does not expose a start time and is not ours to
-  // change, so the page keeps its own. `untrack` because this effect both reads
-  // and writes `connectedAt`.
-  let connectedAt = $state<number | null>(null);
-  $effect(() => {
-    if (room.status === 'connected') {
-      if (untrack(() => connectedAt) === null) connectedAt = Date.now();
-    } else {
-      connectedAt = null;
-    }
-  });
+  const lightLabel = $derived(
+    room.iWantAnother
+      ? 'Waiting on them'
+      : room.theyWantAnother
+        ? 'They want another one'
+        : 'Light another one',
+  );
 
   onMount(() => {
     void (data.roomId ? room.join(data.roomId) : room.joinRandom());
@@ -76,9 +72,10 @@
     };
   });
 
-  // Once a random match lands, rewrite `/room` to `/room/<id>` so copy-link,
-  // refresh and Back/Forward all see the real room. Same route id, so the
-  // component is reused and `load` simply re-runs with the id.
+  // Once a random match lands, rewrite `/room` to `/room/<id>` so refresh and
+  // Back/Forward all see the real room. Same route id, so the component is
+  // reused and `load` simply re-runs with the id. `next()` goes through here
+  // too: the id empties, then fills with the new room.
   $effect(() => {
     if (room.roomId && data.roomId !== room.roomId) {
       void goto(resolve('/room/[[id]]', { id: room.roomId }), {
@@ -89,19 +86,16 @@
     }
   });
 
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      copied = true;
-      setTimeout(() => (copied = false), 1500);
-    } catch {
-      copied = false;
-    }
+  // Both exits replace the history entry, so Back from the front page does not
+  // walk straight back into the room that was just left.
+  function leave() {
+    room.destroy();
+    void goto(resolve('/'), { replaceState: true });
   }
 
-  function hangUp() {
-    room.hangUp();
-    void goto(resolve('/'));
+  function report() {
+    room.report();
+    void goto(resolve('/'), { replaceState: true });
   }
 </script>
 
@@ -110,17 +104,12 @@
     <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <h1 class="text-xl">
         {#if room.roomId}
-          Room <code class="border border-ink bg-putty px-1 py-0.5">{room.roomId}</code>
+          Balcony # <code class="border border-ink bg-putty px-1 py-0.5">{room.roomId}</code>
         {:else}
           Finding you a room
         {/if}
       </h1>
-      <div class="flex items-center gap-3">
-        <Button size="sm" onclick={copyLink} disabled={!shareUrl}>
-          {copied ? 'Copied' : 'Copy the link'}
-        </Button>
-        <Link href={resolve('/')} variant="quiet">Leave</Link>
-      </div>
+      <Button variant="quiet" size="sm" onclick={leave}>Leave</Button>
     </div>
   </Panel>
 
@@ -151,7 +140,11 @@
           <VideoPanel
             stream={room.remoteStream}
             label="them"
-            placeholder={room.status === 'waiting' ? 'nobody yet' : 'no picture from them'}
+            placeholder={room.status === 'waiting'
+              ? 'nobody yet'
+              : room.status === 'expired'
+                ? 'gone'
+                : 'no picture from them'}
           />
           <VideoPanel
             stream={room.localStream}
@@ -164,16 +157,33 @@
 
         {#if room.status === 'waiting'}
           <p class="rt-measure mx-auto text-center text-sm text-ink-soft">
-            The next person out looking for a room lands here. If you'd rather choose who turns up,
-            send them
-            <code class="border border-ink bg-putty px-1 break-all">{shareUrl}</code>
+            The next person out looking for a room lands here.
           </p>
         {/if}
 
-        {#if connectedAt}
-          <div class="mx-auto w-full max-w-64">
-            <CigaretteTimer startedAt={connectedAt} label="you've been out here" />
+        {#if litAt !== null}
+          <div
+            class="mx-auto flex w-full max-w-xl flex-wrap items-end justify-center gap-x-6 gap-y-3"
+          >
+            <CigaretteTimer
+              startedAt={litAt}
+              durationMs={CHAT_DURATION_MS}
+              countdown
+              label="left on this one"
+              class="w-64 max-w-full"
+            />
+            <AshtrayMeter count={room.lit} label="smoked together" class="min-w-40" />
           </div>
+        {/if}
+
+        {#if room.status === 'expired'}
+          <Notice tone="warn" title="That's the break.">
+            <p>Ten minutes is ten minutes. The room's gone; your camera isn't.</p>
+            <div class="flex flex-wrap items-center gap-3 pt-1">
+              <Button variant="ember" onclick={() => void room.next()}>Next one</Button>
+              <Button variant="quiet" onclick={leave}>Leave</Button>
+            </div>
+          </Notice>
         {/if}
 
         {#if room.status === 'error'}
@@ -208,7 +218,19 @@
             onToggle={() => room.toggleCam()}
             onSelect={(id) => void room.selectVideoDevice(id)}
           />
-          <Button variant="danger" onclick={hangUp}>Hang up</Button>
+          {#if room.status === 'connected'}
+            <Button
+              variant={room.theyWantAnother && !room.iWantAnother ? 'ember' : 'default'}
+              disabled={room.iWantAnother}
+              onclick={() => room.lightAnother()}
+            >
+              {lightLabel}
+            </Button>
+          {/if}
+          {#if room.status !== 'expired'}
+            <Button onclick={() => void room.next()}>Next one</Button>
+            <Button variant="danger" onclick={report}>Leave and report</Button>
+          {/if}
         </div>
       </section>
 
