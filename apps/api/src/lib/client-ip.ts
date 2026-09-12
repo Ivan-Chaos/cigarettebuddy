@@ -10,10 +10,25 @@ export type TrustProxy = boolean | number | string;
  * socket peer is the client; a hop count `n` picks the address `n` hops from
  * the right of X-Forwarded-For; anything else truthy trusts the whole chain
  * and takes the leftmost entry.
+ *
+ * `clientHeader` short-circuits all of that: when a CDN such as Cloudflare
+ * sits in front, X-Forwarded-For only ever names its edge nodes, and hundreds
+ * of visitors would share one address. The CDN's own header (Cloudflare:
+ * `cf-connecting-ip`) is the client, provided only the CDN can reach the box.
  */
-export function clientIpFrom(req: IncomingMessage, trustProxy: TrustProxy): string {
+export function clientIpFrom(
+  req: IncomingMessage,
+  trustProxy: TrustProxy,
+  clientHeader?: string,
+): string {
   const remote = req.socket.remoteAddress ?? 'unknown';
   if (!trustProxy) return remote;
+
+  if (clientHeader) {
+    const direct = req.headers[clientHeader.toLowerCase()];
+    const value = Array.isArray(direct) ? direct[0] : direct;
+    if (value?.trim()) return value.trim();
+  }
 
   const header = req.headers['x-forwarded-for'];
   const raw = Array.isArray(header) ? header.join(',') : header;

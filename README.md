@@ -501,6 +501,31 @@ browser ──https/wss──▶ caddy:443 ──┬── /api/*  ──▶ api
    proof TURN works. Without TURN, peers behind carrier-grade or symmetric NAT
    simply never connect.
 
+### Host nginx instead of Caddy
+
+If nginx already owns ports 80/443 on the box, use `docker-compose.nginx.yml`
+in place of the prod overlay. It publishes the API on `127.0.0.1:3000` and the
+web app on `127.0.0.1:8080` and starts no proxy of its own; the server block
+in `deploy/nginx/cigbuddy.conf` does the routing (its header comment has the
+install commands, certbot included).
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.nginx.yml up -d --build
+```
+
+### Behind Cloudflare
+
+- **SSL/TLS mode must be Full (strict)**, once the origin has its certificate.
+  Flexible mode talks plain HTTP to the origin, which redirects to HTTPS, and
+  the result is a redirect loop.
+- **Set `CLIENT_IP_HEADER=cf-connecting-ip`** in `.env`. Otherwise every
+  visitor looks like a Cloudflare edge address and the per-address connection
+  cap starts refusing real people.
+- **TURN cannot go through Cloudflare.** The proxy only carries HTTP(S). Give
+  coturn its own A record with the orange cloud **off** (DNS only), e.g.
+  `turn.example.com`, and use that in `TURN_URLS` and coturn's `realm`.
+- WebSockets are on by default on every Cloudflare plan; nothing to enable.
+
 ### Updating
 
 ```bash

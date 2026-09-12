@@ -53,6 +53,8 @@ services:
     environment:
       CORS_ORIGIN: https://${DOMAIN:?set DOMAIN in .env}
       TRUST_PROXY: '1'
+      # Set to cf-connecting-ip in .env when Cloudflare proxies the domain.
+      CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-}
     <<: *logging
 
   web:

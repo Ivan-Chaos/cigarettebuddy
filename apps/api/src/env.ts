@@ -23,6 +23,9 @@ const envSchema = z
     // "true", or a subnet keyword like "loopback". Unset means no proxy, so
     // X-Forwarded-* headers are ignored and cannot be spoofed.
     TRUST_PROXY: optionalString,
+    // Header carrying the real client address when a CDN sits in front, e.g.
+    // "cf-connecting-ip" for Cloudflare. Only honoured when TRUST_PROXY is set.
+    CLIENT_IP_HEADER: optionalString,
 
     // ICE servers handed to browsers for WebRTC. Comma-separated URL lists.
     STUN_URLS: z.string().default(''),

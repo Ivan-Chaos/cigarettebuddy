@@ -18,7 +18,7 @@ const server = app.listen(env.API_PORT, env.API_HOST, () => {
 const signaling = attachSignaling(server, {
   iceServers: iceServersFromEnv,
   allowedOrigins: env.isProduction ? env.corsOrigins : undefined,
-  clientIp: (req) => clientIpFrom(req, env.trustProxy),
+  clientIp: (req) => clientIpFrom(req, env.trustProxy, env.CLIENT_IP_HEADER),
   maxConnectionsPerIp: env.isProduction ? undefined : Infinity,
 });
 

@@ -1,0 +1,48 @@
+# Production overlay for a VPS that already runs nginx on the host. Use this
+# INSTEAD of docker-compose.prod.yml (which brings its own Caddy and would
+# fight nginx for ports 80/443):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.nginx.yml up -d --build
+#
+# The API and web containers are published on the loopback interface only, so
+# nginx can reach them and nothing else on the internet can. nginx terminates
+# TLS and proxies `/api/*` to 127.0.0.1:3000 and everything else to
+# 127.0.0.1:8080 — see deploy/nginx/cigbuddy.conf for the server block.
+#
+# Requires DOMAIN in the root .env (see .env.example).
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+
+services:
+  postgres:
+    ports: !reset []
+    <<: *logging
+
+  migrate:
+    <<: *logging
+
+  api:
+    ports: !override
+      - '127.0.0.1:${API_HOST_PORT:-3000}:3000'
+    environment:
+      CORS_ORIGIN: https://${DOMAIN:?set DOMAIN in .env}
+      # nginx is one hop. Cloudflare in front adds none to the count: nginx
+      # replaces X-Forwarded-For with the address it saw, i.e. Cloudflare's,
+      # which is why CLIENT_IP_HEADER exists.
+      TRUST_PROXY: '1'
+      CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-}
+    <<: *logging
+
+  web:
+    ports: !override
+      - '127.0.0.1:${WEB_HOST_PORT:-8080}:3000'
+    environment:
+      ORIGIN: https://${DOMAIN:?set DOMAIN in .env}
+      # Same origin as the page: the client derives wss://$DOMAIN/api/ws.
+      PUBLIC_SIGNALING_URL: ''
+    <<: *logging
