@@ -1,0 +1,407 @@
+/* ---- The kit's recipe classes --------------------------------------------
+   These live in `@layer components`, so Tailwind utilities still beat them and
+   `<Panel class="bg-putty">` works. That is the opposite choice from
+   `shadcn-skin.css`, which sits in `@layer skin` *above* utilities because it
+   has to overpower styles baked into vendored files. Two files, two layers,
+   two different jobs.
+
+   Rule of thumb: if a consumer might want to override it, it belongs here or
+   in a utility. If it is a keyframe or a component's internal geometry, it
+   belongs in that component's scoped <style> block.
+   -------------------------------------------------------------------------- */
+
+@layer components {
+  /* ---- page scaffolding -------------------------------------------------- */
+
+  /* A full-bleed dark bar, so the page has a real top edge rather than
+     starting straight into a bordered sheet. The bar spans the viewport; its
+     inner row is constrained to the same width as the frame below it, so the
+     wordmark lines up with the content. */
+  .rt-topbar {
+    background-color: var(--color-ink);
+    color: var(--color-paper);
+  }
+
+  .rt-topbar__inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 2rem;
+    max-width: var(--container-site);
+    margin-inline: auto;
+    padding: 0.9rem 1rem;
+  }
+  @media (width >= 40rem) {
+    .rt-topbar__inner {
+      padding-inline: 1.5rem;
+    }
+  }
+  /* Matches the room page's wider frame. */
+  .rt-topbar__inner--wide {
+    max-width: 76rem;
+  }
+
+  /* A full-bleed band -- the same trick as .rt-topbar, generalised. The outer
+     element is a plain block with no width constraint (never `100vw`, which
+     overflows by the scrollbar's width), and the inner row is capped at the
+     frame's width so band content lines up with the header row above it. */
+  .rt-band {
+    display: block;
+  }
+  .rt-band--divide {
+    border-bottom: 1px solid var(--color-ink);
+  }
+
+  .rt-band__inner {
+    max-width: var(--container-site);
+    margin-inline: auto;
+    padding: 2rem 1rem;
+  }
+  @media (width >= 40rem) {
+    .rt-band__inner {
+      padding: 3rem 1.5rem;
+    }
+  }
+  .rt-band__inner--wide {
+    max-width: 76rem;
+  }
+
+  /* Hero headline. The global h1 is a fixed 2.75rem, which carries a column
+     inside the sheet but is too small to hold a full-width band. The vw term
+     is deliberately modest: this sits in a ~600px column beside an image, not
+     across the whole band, so a larger one wraps to five ragged lines. */
+  .rt-display {
+    font-size: clamp(2.25rem, 4.2vw, 3.5rem);
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+  }
+  /* Section headings inside a band: the same treatment a step down, so each
+     band does not re-declare the clamp inline. */
+  .rt-display--sm {
+    font-size: clamp(1.9rem, 3.2vw, 2.75rem);
+  }
+
+  .rt-frame {
+    max-width: var(--container-site);
+    margin-inline: auto;
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-ink);
+    box-shadow: 4px 4px 0 0 var(--color-ink);
+  }
+
+  /* The frame's insets, named rather than inlined: both the shell's <main>
+     and an unframed page's own sheet have to carry them, and two copies of a
+     four-utility responsive string is how they drift apart. */
+  .rt-frame__body {
+    padding-block: 1.5rem;
+    padding-inline: 1rem;
+  }
+  @media (width >= 40rem) {
+    .rt-frame__body {
+      padding-block: 2rem;
+      padding-inline: 1.5rem;
+    }
+  }
+
+  /* Below 40rem the frame goes edge to edge: a 4px offset shadow at the
+     viewport edge is what causes horizontal scroll on phones. */
+  @media (width < 40rem) {
+    .rt-frame {
+      border-inline: 0;
+      box-shadow: none;
+    }
+  }
+
+  .rt-skip {
+    position: absolute;
+    left: -9999px;
+    z-index: 100;
+  }
+  .rt-skip:focus {
+    left: 0.5rem;
+    top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background-color: var(--color-ink);
+    color: var(--color-paper);
+    text-decoration: none;
+  }
+
+  /* ---- surfaces ---------------------------------------------------------- */
+
+  .rt-panel {
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-ink);
+  }
+  .rt-panel--putty {
+    background-color: var(--color-putty);
+  }
+  .rt-panel--screen {
+    background-color: var(--color-screen);
+    color: var(--color-glow);
+  }
+
+  .rt-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.3rem 0.6rem;
+    background-color: var(--color-putty);
+    border-bottom: 1px solid var(--color-ink);
+  }
+
+  /* Coloured title strips. The panel body stays paper and the border stays ink,
+     so a page of these reads like a row of labelled folders rather than a
+     paint chart. Gold is light enough to keep ink text. */
+  .rt-strip--teal {
+    background-color: var(--color-teal);
+    color: var(--color-paper);
+  }
+  .rt-strip--berry {
+    background-color: var(--color-berry);
+    color: var(--color-paper);
+  }
+  .rt-strip--moss {
+    background-color: var(--color-moss);
+    color: var(--color-paper);
+  }
+  .rt-strip--ember {
+    background-color: var(--color-ember);
+    color: var(--color-paper);
+  }
+  .rt-strip--gold {
+    background-color: var(--color-gold);
+    color: var(--color-ink);
+  }
+
+  .rt-raise {
+    box-shadow: 3px 3px 0 0 var(--color-ink);
+  }
+  .rt-raise-sm {
+    box-shadow: 2px 2px 0 0 var(--color-ink);
+  }
+
+  /* The press: move into the shadow and drop it, so the thing looks pushed
+     flat against the page rather than merely nudged. */
+  .rt-press {
+    transition: none;
+  }
+  .rt-press:active:not(:disabled, [aria-disabled='true']) {
+    transform: translate(2px, 2px);
+    box-shadow: none;
+  }
+
+  .rt-inset {
+    box-shadow:
+      inset 1px 1px 0 0 color-mix(in srgb, var(--color-ink) 26%, transparent),
+      inset -1px -1px 0 0 color-mix(in srgb, var(--color-paper) 60%, transparent);
+  }
+
+  .rt-hairline {
+    border: 1px solid var(--color-ink);
+  }
+
+  /* ---- layout ------------------------------------------------------------ */
+
+  .rt-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.75rem;
+    align-items: start;
+  }
+  /* 60rem matches the breakpoint the old .room-layout used, so existing users
+     get no reflow surprise. DOM order is main-then-rail, so the stacked case
+     needs no `order` shuffling and tab order stays correct for free. */
+  @media (width >= 60rem) {
+    .rt-columns {
+      grid-template-columns: minmax(0, 1fr) var(--spacing-rail);
+    }
+  }
+
+  .rt-stage {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .rt-videogrid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @media (width >= 40rem) {
+    .rt-videogrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  .rt-buttonrow {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+  }
+
+  .rt-measure {
+    max-width: 66ch;
+  }
+
+  /* ---- type -------------------------------------------------------------- */
+
+  .rt-mono {
+    font-family: var(--font-mono);
+  }
+  .rt-pixel {
+    font-family: var(--font-pixel);
+    letter-spacing: 0.06em;
+  }
+
+  .rt-logotype {
+    font-family: var(--font-serif);
+    font-size: clamp(1.75rem, 6vw, 2.125rem);
+    line-height: 1;
+    color: var(--color-ink);
+    text-decoration: none;
+  }
+  .rt-logotype:hover {
+    color: var(--color-ink);
+  }
+
+  /* ---- data -------------------------------------------------------------- */
+
+  .rt-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  .rt-table th,
+  .rt-table td {
+    border: 1px solid var(--color-ink);
+    padding: 0.3rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .rt-table th {
+    background-color: var(--color-putty);
+    font-family: var(--font-mono);
+    font-weight: 400;
+  }
+  .rt-table tbody tr:nth-child(even) td {
+    background-color: color-mix(in srgb, var(--color-putty) 45%, var(--color-panel));
+  }
+
+  .rt-quote {
+    border-left: 3px solid var(--color-ink);
+    padding-left: 0.85rem;
+    font-family: var(--font-serif);
+    font-style: italic;
+  }
+
+  /* ---- controls ---------------------------------------------------------- */
+
+  /* Native box, ember mark, no SVG and no library. */
+  .rt-check {
+    appearance: none;
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-ink);
+    display: grid;
+    place-content: center;
+  }
+  .rt-check:checked::after {
+    content: '';
+    width: 0.55rem;
+    height: 0.55rem;
+    background-color: var(--color-ember);
+  }
+  .rt-check:disabled {
+    background-color: var(--color-putty);
+    opacity: 0.6;
+  }
+
+  /* ---- disclosure -------------------------------------------------------- */
+
+  /* A native <details> dressed to match the kit. Native because the FAQ wants
+     independent rows that all start closed, which is exactly what <details>
+     already does -- so there is no state to hold, nothing to hydrate, and it
+     still works with JavaScript off. `summary` is already in app.css's cursor
+     selector, so the butt cursor comes along for free. */
+  .rt-faq > summary {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    list-style: none;
+  }
+  /* Safari draws its own triangle from a pseudo-element rather than a marker. */
+  .rt-faq > summary::-webkit-details-marker {
+    display: none;
+  }
+  .rt-faq > summary:hover {
+    background-color: color-mix(in srgb, var(--color-putty) 45%, transparent);
+  }
+  /* The first keyboard-operable thing on the landing page that is not a button,
+     so the ring is drawn inside the row -- an outset one would be clipped by
+     the list's border. */
+  .rt-faq > summary:focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: -2px;
+  }
+
+  /* [+] and [-] rather than a chevron that rotates: rotation is a modern-UI
+     tell, and a bracketed glyph in the mono face is what a text-mode interface
+     would have used. Content-swapped so the two states cannot drift apart. */
+  /* Fixed width rather than shrink-to-fit, so the answer below can be indented
+     to meet the question text with arithmetic instead of a guess: the body's
+     inset is padding + this width + the flex gap. */
+  .rt-faq__mark {
+    font-family: var(--font-mono);
+    color: var(--color-ember);
+    flex: none;
+    width: 2rem;
+  }
+  .rt-faq__mark::before {
+    content: '[+]';
+  }
+  .rt-faq[open] .rt-faq__mark::before {
+    content: '[-]';
+  }
+
+  /* 1.25rem of row padding + a 2rem marker + the 0.75rem gap: the answer starts
+     under the first letter of its question rather than under the [+]. */
+  .rt-faq__body {
+    padding: 0 1.25rem 1.25rem 4rem;
+  }
+  @media (width < 30rem) {
+    .rt-faq__body {
+      padding-left: 1.25rem;
+    }
+  }
+
+  /* ---- old web ----------------------------------------------------------- */
+
+  .rt-badgewall {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  /* A specimen cell in the parts bin. */
+  .rt-specimen {
+    border: 1px solid color-mix(in srgb, var(--color-ink) 35%, transparent);
+    background-color: color-mix(in srgb, var(--color-putty) 30%, var(--color-panel));
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+  .rt-specimen > figcaption {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--color-ink-soft);
+    margin-top: auto;
+  }
+}

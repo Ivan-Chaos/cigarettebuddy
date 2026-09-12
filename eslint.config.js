@@ -35,6 +35,16 @@ export default ts.config(
     },
   },
   {
+    // The retro kit's link components take an `href` prop. A generic component
+    // cannot know whether the URL it is handed is internal, so resolve() is the
+    // caller's job -- and every call site in the app does it, where this rule
+    // still checks them. Only the kit's own pass-through is exempt.
+    files: ['apps/web/src/lib/components/retro/*.svelte'],
+    rules: {
+      'svelte/no-navigation-without-resolve': ['error', { ignoreLinks: true }],
+    },
+  },
+  {
     ignores: [
       '**/node_modules/',
       '**/dist/',

@@ -313,26 +313,92 @@ pnpm --filter @cigbuddy/web exec shadcn-svelte add <name>
 pnpm install
 ```
 
-If you ever re-run `init`, pass `--preset bd1gAJJg` to reproduce this project's
-design system (vega / zinc / Lucide / Inter, default radius).
+If you ever re-run `init`, pass `--preset bd1gAJJg` to reproduce the generated
+half of the stylesheet (vega / zinc / Lucide / Inter, default radius) — then
+re-apply the two edits below the comment banner in `src/app.css`, since `init`
+overwrites the font line and knows nothing about our palette.
 
 ### Theming
 
-`src/app.css` has three parts, in cascade order:
+The site is an **old-web-revival design**: warm paper ground, hard 1px ink
+borders, square corners, hard offset shadows, no gradients anywhere.
+**It is light-only** — there is no `.dark` class on `<html>` any more.
 
-1. The generated shadcn token blocks (`:root`, `.dark`, `@theme inline`).
-2. **Our overrides** — a `.dark` block retuning the tokens to the app's own
-   palette (`#0f1115` ground, `#7aa2f7` accent). The app is dark-only, so
-   `src/app.html` puts `class="dark"` on `<html>`; drop that and add a toggle if
-   a light mode is ever wanted.
-3. The **pre-shadcn stylesheet** (`.card`, `.tile`, `.chat-*`, bare `button` and
-   `input` rules) wrapped in `@layer base`, so Tailwind utilities — and
-   therefore every shadcn component — always beat it. Its variables are prefixed
-   `--app-*` because `--border`, `--accent` and `--muted` mean different things
-   in the two systems. Delete rules from that block as screens migrate.
+Four faces, two of them webfonts:
+
+| Token          | Face                       | Used for                       |
+| -------------- | -------------------------- | ------------------------------ |
+| `--font-serif` | Fraunces Variable (`wonk`) | headings and the logotype      |
+| `--font-sans`  | Trebuchet MS (system)      | body and UI                    |
+| `--font-mono`  | Courier New (system)       | ids, data rows, small captions |
+| `--font-pixel` | Silkscreen                 | counter digits, widget strips  |
+
+Headings set `font-variation-settings: 'WONK' 1`, which swaps in Fraunces'
+quirky alternates. That axis is the entire reason the face is there rather than
+Georgia, which read sterile. Only the `wonk` subset is imported — 36 KB against
+118 KB for the all-axes file.
+
+**Colour is confined to title strips, tags, badges and step numbers.** Panel
+bodies stay paper and every border stays ink; keeping the structure monochrome
+is what stops six hues reading as noise. Links are blue and underlined, visited
+purple, with ember reserved for hover, focus and the cigarette.
+
+`src/app.css` has two halves, split by a comment banner:
+
+1. **Above the line** — the blocks `shadcn-svelte init` generated (`:root`,
+   `.dark`, `@theme inline`), kept byte-identical so re-running the CLI stays a
+   clean operation. The one exception is the `--font-sans` line.
+2. **Below the line** — ours. A `@theme` block with the palette, the four font
+   stacks and the hard `--shadow-*` scale, then a `:root` block re-pointing the
+   shadcn token names (`--background`, `--card`, `--primary`, `--border`, …) at
+   that palette, so the vendored components inherit the look without being
+   edited. `--radius: 0rem` collapses the whole `--radius-*` calc chain, which
+   is what squares every corner from one declaration.
+
+Two contrast rules the palette must obey, both measured and commented in the
+file: never `--color-ink-soft` on `--color-putty` (4.33:1, fails AA), and
+`--color-ember-hot` is screen-only or non-text (3.10:1 on paper).
+
+### The two extra stylesheets
+
+- `src/lib/styles/retro.css` — the kit's recipe classes (`.rt-panel`,
+  `.rt-press`, `.rt-columns`, …) in `@layer components`, so Tailwind utilities
+  still beat them and `<Panel class="bg-putty">` works.
+- `src/lib/styles/shadcn-skin.css` — in `@layer skin`, which `app.css` declares
+  **after** `utilities`, so it outranks every utility. This is the only way to
+  restyle the vendored components from the outside: the vega style draws their
+  edges with `ring-1 ring-foreground/10` and their corners with `rounded-xl`,
+  and no token retune turns a 10%-alpha ring into a hard ink hairline. The cost
+  is that `<Card class="rounded-lg">` no longer wins, so this file only touches
+  the four properties vega hardcodes and we have to fight.
+
+Do not remove `@custom-variant dark` or the `tw-animate-css` import even though
+the site is light-only and animations are suppressed: files under `ui/` still
+reference `dark:` and `animate-in` utilities, and dropping either is a build
+error.
+
+### Components
+
+`src/lib/components/retro/` is the hand-written kit — 23 components, flat, one
+barrel. Import from `$lib/components/retro`. Rule of thumb: if a consumer might
+want to override it, it belongs in `retro.css` or a utility; if it is a keyframe
+or a component's internal geometry, it belongs in that component's scoped
+`<style>`.
 
 `src/lib/components/ui/` is excluded from ESLint and Prettier: the CLI owns the
-formatting, and re-running `add` would otherwise churn the diff.
+formatting, and re-running `add` would otherwise churn the diff. The kit wraps
+`bits-ui` through those vendored wrappers where it needs real behavior (dropdown
+menu, dialog, tooltip) and hand-rolls everything presentational.
+
+Two SSR traps worth knowing, both already handled and commented:
+
+- **bits-ui builds portal containers as it initialises**, which a server render
+  does not produce, so wrapping content in a `Tooltip` during the first client
+  render fails to hydrate. `Tooltip` renders its bare trigger until after mount.
+- **Anything derived from `Date.now()` or `toLocaleTimeString` differs between
+  server and client.** `CigaretteTimer` takes a `progress` prop for drawing a
+  lit cigarette that is not a clock, and `ChatPanel` holds timestamps back until
+  mount.
 
 ## Conventions worth keeping
 

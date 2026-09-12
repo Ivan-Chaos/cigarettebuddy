@@ -1,8 +1,7 @@
 <script lang="ts">
   import type { Component } from 'svelte';
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
-  import { Button } from '$lib/components/ui/button';
-  import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+  import { Button, MenuButton } from '$lib/components/retro';
 
   interface Props {
     /** Menu heading, e.g. "Microphone". */
@@ -35,50 +34,34 @@
   function nameOf(device: MediaDeviceInfo, index: number): string {
     return device.label || `${heading} ${index + 1}`;
   }
+
+  const options = $derived(
+    devices.map((device, index) => ({ value: device.deviceId, label: nameOf(device, index) })),
+  );
 </script>
 
+<!-- The split-button seam is a shared 1px ink border rather than a pair of
+     half-rounded corners: there are no rounded corners left to halve. -->
 <div class="inline-flex" role="group" aria-label={heading}>
-  <Button
-    variant="secondary"
-    class="rounded-r-none"
-    aria-pressed={!active}
-    {disabled}
-    onclick={onToggle}
-  >
-    <Icon />
+  <Button aria-pressed={!active} {disabled} onclick={onToggle}>
+    <Icon aria-hidden="true" />
     {label}
   </Button>
 
-  <DropdownMenu.Root>
-    <DropdownMenu.Trigger>
-      {#snippet child({ props })}
-        <Button
-          {...props}
-          variant="secondary"
-          size="icon"
-          class="rounded-l-none border-l border-border/60"
-          aria-label="Choose {heading.toLowerCase()}"
-          disabled={disabled && devices.length === 0}
-        >
-          <ChevronDownIcon />
-        </Button>
-      {/snippet}
-    </DropdownMenu.Trigger>
-
-    <DropdownMenu.Content align="end" class="min-w-56">
-      <DropdownMenu.Label>{heading}</DropdownMenu.Label>
-      <DropdownMenu.Separator />
-      {#if devices.length === 0}
-        <DropdownMenu.Item disabled>No {heading.toLowerCase()} found</DropdownMenu.Item>
-      {:else}
-        <DropdownMenu.RadioGroup value={selected} onValueChange={onSelect}>
-          {#each devices as device, index (device.deviceId)}
-            <DropdownMenu.RadioItem value={device.deviceId}>
-              <span class="truncate">{nameOf(device, index)}</span>
-            </DropdownMenu.RadioItem>
-          {/each}
-        </DropdownMenu.RadioGroup>
-      {/if}
-    </DropdownMenu.Content>
-  </DropdownMenu.Root>
+  <MenuButton
+    label="Choose {heading.toLowerCase()}"
+    {heading}
+    value={selected}
+    {options}
+    {onSelect}
+    align="end"
+    size="icon"
+    disabled={disabled && devices.length === 0}
+    emptyText="No {heading.toLowerCase()}s found"
+    class="-ml-px"
+  >
+    {#snippet trigger()}
+      <ChevronDownIcon aria-hidden="true" />
+    {/snippet}
+  </MenuButton>
 </div>
