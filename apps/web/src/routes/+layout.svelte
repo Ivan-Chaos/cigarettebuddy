@@ -85,11 +85,6 @@
       <div class="text-sm">
         <p>cigarettebuddy is two boxes and a stranger.</p>
         <p class="text-ink-soft">no cookies, no accounts, no analytics, no idea who you'll get.</p>
-        <!-- Kept out of the nav: the kit is developer-facing, not a section of
-             the site. Reachable, just not advertised. -->
-        <p class="mt-1">
-          <a href={resolve('/kit')} class="text-sm">the parts bin</a>
-        </p>
       </div>
       <div class="rt-badgewall">
         <Badge88x31 title="Made in Svelte" label="MADE IN" sublabel="SVELTE" tone="berry" />
