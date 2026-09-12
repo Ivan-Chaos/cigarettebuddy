@@ -397,3 +397,51 @@ describe('expiry', () => {
     await vi.waitFor(() => expect(quickSignaling.roomCount()).toBe(0));
   });
 });
+
+describe('per-address connection cap', () => {
+  let capped: Server;
+  let cappedSignaling: Signaling;
+  let cappedUrl: string;
+
+  beforeAll(async () => {
+    capped = createServer(createApp());
+    cappedSignaling = attachSignaling(capped, {
+      iceServers: () => ICE,
+      heartbeatMs: 60_000,
+      maxConnectionsPerIp: 2,
+      // Every test socket comes from 127.0.0.1, so a forwarded header is the
+      // only way to tell "clients" apart — exactly what the resolver is for.
+      clientIp: (req) => String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress),
+    });
+    await new Promise<void>((resolve) => capped.listen(0, '127.0.0.1', resolve));
+    cappedUrl = `ws://127.0.0.1:${(capped.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await cappedSignaling.close();
+    await new Promise<void>((resolve) => capped.close(() => resolve()));
+  });
+
+  function connectAs(ip: string): Promise<WebSocket> {
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(`${cappedUrl}/api/ws`, { headers: { 'x-forwarded-for': ip } });
+      ws.once('open', () => resolve(ws));
+      ws.once('error', reject);
+    });
+  }
+
+  it('refuses the socket that would exceed the cap and frees the slot on close', async () => {
+    const a = await connectAs('203.0.113.7');
+    const b = await connectAs('203.0.113.7');
+
+    await expect(connectAs('203.0.113.7')).rejects.toThrow(/429/);
+    // Another address is unaffected.
+    const other = await connectAs('203.0.113.8');
+
+    a.close();
+    await closed(a);
+    const c = await connectAs('203.0.113.7');
+
+    closeAll(b, c, other);
+  });
+});

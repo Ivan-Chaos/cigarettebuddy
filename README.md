@@ -16,7 +16,7 @@ apps/
             + Dockerfile (also provides the migrate entrypoint)
 packages/
   shared/   Zod schemas & types shared by web and api (the API contract)
-  db/       Drizzle schema, client, migrations, seed
+  db/       Drizzle schema (empty for now), client, migrations
   env/      Layered .env loading (shared root file + per-app file)
 ```
 
@@ -37,9 +37,7 @@ for the web app, `tsx` for the API in dev, and `tsup` bundles them into
 pnpm install
 pnpm env:init             # copies every .env.example to a .env (see Configuration)
 pnpm db:up                # start Postgres in Docker
-pnpm db:generate          # create the first SQL migration from the schema
-pnpm db:migrate           # apply it
-pnpm db:seed              # optional sample rows
+pnpm db:migrate           # apply the committed migrations
 pnpm dev                  # api on :3000, web on :5173
 ```
 
@@ -122,14 +120,15 @@ exits; `api` will not start until it succeeds, so a deploy can never serve
 traffic against an un-migrated database. `api` and `migrate` share the same
 image (`cigbuddy/api`), which is built once and run with a different command.
 
-| Command               | What it does                                         |
-| --------------------- | ---------------------------------------------------- |
-| `pnpm docker:up`      | Build (if needed) and start the whole stack detached |
-| `pnpm docker:build`   | Build the images without starting anything           |
-| `pnpm docker:logs`    | Tail the `api` and `web` logs                        |
-| `pnpm docker:migrate` | Run the migration container on its own               |
-| `pnpm docker:down`    | Stop the stack, keep the database volume             |
-| `pnpm docker:reset`   | Stop it and **drop the database volume**             |
+| Command               | What it does                                                     |
+| --------------------- | ---------------------------------------------------------------- |
+| `pnpm docker:up`      | Build (if needed) and start the whole stack detached             |
+| `pnpm docker:build`   | Build the images without starting anything                       |
+| `pnpm docker:logs`    | Tail the `api` and `web` logs                                    |
+| `pnpm docker:migrate` | Run the migration container on its own                           |
+| `pnpm docker:down`    | Stop the stack, keep the database volume                         |
+| `pnpm docker:reset`   | Stop it and **drop the database volume**                         |
+| `pnpm docker:prod:up` | Same stack plus Caddy/TLS — see [Deploying](#deploying-to-a-vps) |
 
 Ports (override in `.env`): web `WEB_PORT` → 8080, API `API_PORT` → 3000,
 Postgres `POSTGRES_PORT` → 5432.
@@ -204,21 +203,18 @@ whose `Origin` is listed in `CORS_ORIGIN` when running in production).
 | `pnpm db:migrate`                     | Apply pending migrations                                                 |
 | `pnpm db:push`                        | Push the schema straight to the DB (fast prototyping, no migration file) |
 | `pnpm db:studio`                      | Drizzle Studio                                                           |
-| `pnpm db:seed`                        | Insert sample data                                                       |
 
 ## API
 
-| Method | Path                        | Notes                                            |
-| ------ | --------------------------- | ------------------------------------------------ |
-| GET    | `/api/health/live`          | Liveness — process only                          |
-| GET    | `/api/health/ready`         | Readiness — also pings Postgres, 503 if down     |
-| GET    | `/api/ice`                  | ICE servers browsers get, for debugging TURN     |
-| WS     | `/api/ws`                   | Room signaling — see [Video rooms](#video-rooms) |
-| GET    | `/api/users?limit=&offset=` | Paginated list with `meta.total`                 |
-| POST   | `/api/users`                | Body validated by `createUserSchema`             |
-| GET    | `/api/users/:id`            |                                                  |
-| PATCH  | `/api/users/:id`            |                                                  |
-| DELETE | `/api/users/:id`            | 204                                              |
+| Method | Path                | Notes                                            |
+| ------ | ------------------- | ------------------------------------------------ |
+| GET    | `/api/health/live`  | Liveness — process only                          |
+| GET    | `/api/health/ready` | Readiness — also pings Postgres, 503 if down     |
+| GET    | `/api/ice`          | ICE servers browsers get, for debugging TURN     |
+| WS     | `/api/ws`           | Room signaling — see [Video rooms](#video-rooms) |
+
+That is the whole surface: nothing is stored yet, so there are no resource
+routes. The Postgres pipeline stays in place for the first real table.
 
 Errors always come back as `{ error: { message, code, details? } }` — see
 `apiErrorSchema` in `packages/shared`.
@@ -314,7 +310,7 @@ without waiting, pass a short `chatDurationMs` to `attachSignaling` in
 
 **Known limitation.** A browser that vanishes without closing its socket
 (network drop, killed process) keeps its seat until the WebSocket heartbeat
-reaps it, up to twice `heartbeatMs` (60 s by default). Someone matched into
+reaps it, up to twice `heartbeatMs` (30 s by default). Someone matched into
 that room in the meantime sits at "Connecting to peer…" until the ghost is
 removed, then drops back to "waiting" and is matchable again.
 
@@ -431,8 +427,9 @@ Two SSR traps worth knowing, both already handled and commented:
 - **The contract lives in `packages/shared`.** Add a Zod schema there, then use
   it to validate in the API _and_ in SvelteKit form actions. Types are inferred,
   never hand-written twice.
-- **Database rows are not wire types.** `apps/api/src/routes/users.ts` maps
-  `UserRow` (with `Date`s) to `User` (ISO strings) in one place.
+- **Database rows are not wire types.** When the first table lands, map the
+  Drizzle row (with `Date`s) to the shared Zod shape (ISO strings) in one
+  place inside the route, and never export a row type from the API.
 - **Env is parsed once.** `apps/api/src/env.ts` validates `process.env` at boot
   and exits with a readable error if something is missing.
 - **A variable belongs to one owner.** If only one app reads it, it goes in that
@@ -445,15 +442,94 @@ Two SSR traps worth knowing, both already handled and commented:
   `"exports": { ".": "./src/index.ts" }`, then depend on it with
   `"@cigbuddy/<name>": "workspace:*"`.
 
-## Production notes
+## Deploying to a VPS
+
+`docker-compose.prod.yml` layers a production setup over the base Compose
+file: **Caddy** in front terminating TLS for `DOMAIN`, the Postgres/API/web
+host ports removed, origins pointed at `https://$DOMAIN`, the API trusting one
+proxy hop, and container logs capped. HTTPS is not a nicety here — browsers
+refuse `getUserMedia` outside a secure context, so the app does not work over
+plain `http://` at all.
+
+Caddy makes the site a single origin: `/api/*` is proxied to the API (including
+the WebSocket upgrade) and everything else to the SvelteKit server. The browser
+therefore derives `wss://$DOMAIN/api/ws` on its own and `PUBLIC_SIGNALING_URL`
+stays empty.
+
+```
+browser ──https/wss──▶ caddy:443 ──┬── /api/*  ──▶ api:3000 ──▶ postgres
+                                   └── /*      ──▶ web:3000 ──▶ api:3000 (SSR)
+```
+
+### First deploy
+
+1. Ubuntu 24.04 (or similar) with Docker Engine and the Compose plugin; point
+   an A record for your domain at it. Open **22, 80, 443** in the firewall and
+   nothing else from this stack.
+2. Clone the repo at the release tag and create the root `.env` **by hand** —
+   never copy the one from your laptop:
+
+   ```ini
+   NODE_ENV=production
+   LOG_LEVEL=info
+   DOMAIN=chat.example.com
+   POSTGRES_USER=cigbuddy
+   POSTGRES_PASSWORD=<long random string>
+   POSTGRES_DB=cigbuddy
+   # TURN — see "TURN" under Video rooms. Strongly recommended for a public site.
+   TURN_URLS=turn:turn.example.com:3478
+   TURN_SECRET=<coturn static-auth-secret>
+   ```
+
+   `DATABASE_URL` is not needed: Compose builds it from the `POSTGRES_*` values.
+   The per-app `.env` files are not used by the containers either.
+
+3. Bring it up:
+
+   ```bash
+   pnpm docker:prod:up      # docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+   pnpm docker:prod:logs
+   ```
+
+   Order is the same as locally — `postgres → migrate → api → web → caddy` —
+   so traffic is never served against an un-migrated database. Caddy requests
+   the certificate on first start; give it a few seconds.
+
+4. Verify: `curl https://$DOMAIN/api/health/ready` returns `{"status":"ok"}`;
+   open the site in two browsers, one of them on mobile data, and check
+   `chrome://webrtc-internals` shows a `relay` candidate pair — that is the
+   proof TURN works. Without TURN, peers behind carrier-grade or symmetric NAT
+   simply never connect.
+
+### Updating
+
+```bash
+git fetch --tags && git checkout v1.x.y
+pnpm docker:prod:up
+```
+
+The images are rebuilt only where sources changed, `migrate` applies anything
+new, and Caddy keeps serving throughout.
+
+### Running without Compose
 
 - `apps/api` bundles to a single ESM file — `node dist/index.js`.
 - `apps/web` builds with `adapter-node` — `node build/index.js` (set `PORT`).
-- Set `API_URL` and `ORIGIN` for the web server and `CORS_ORIGIN` for the API
-  to the real origins — as real environment variables, not files. `ORIGIN` is not optional behind a proxy: `adapter-node`
+- Set `API_URL` and `ORIGIN` for the web server and `CORS_ORIGIN` and
+  `TRUST_PROXY` for the API to match your proxy — as real environment
+  variables, not files. `ORIGIN` is not optional behind a proxy: `adapter-node`
   rejects form POSTs whose origin doesn't match it.
 - Run migrations as a release step — `pnpm db:migrate` on a host, or the
   `migrate` container in Compose, Kubernetes, or ECS.
 - The images take no build args and read all configuration from the
   environment, so the same `cigbuddy/api` and `cigbuddy/web` tags promote
   unchanged from staging to production.
+
+### Abuse limits
+
+The API refuses more than eight open signaling sockets per client address
+(`maxConnectionsPerIp` in `attachSignaling`; lifted in development, where the
+Vite proxy would make every socket look like one client). Behind a proxy the
+address comes from `X-Forwarded-For`, which is why `TRUST_PROXY` must match
+the real hop count — too high and a client can forge its address, too low and
+every visitor shares the proxy's.

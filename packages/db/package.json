@@ -1,6 +1,6 @@
 {
   "name": "@cigbuddy/db",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -12,8 +12,7 @@
     "generate": "drizzle-kit generate",
     "migrate": "tsx src/migrate.ts",
     "push": "drizzle-kit push",
-    "studio": "drizzle-kit studio",
-    "seed": "tsx src/seed.ts"
+    "studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@cigbuddy/env": "workspace:*",

@@ -26,11 +26,4 @@ describe('api', () => {
     expect(Array.isArray(res.body.data.iceServers)).toBe(true);
     expect(res.body.data.iceServers.length).toBeGreaterThan(0);
   });
-
-  it('rejects an invalid user payload', async () => {
-    const res = await request(app).post('/api/users').send({ email: 'not-an-email' });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('validation_error');
-  });
 });

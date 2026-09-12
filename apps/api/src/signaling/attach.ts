@@ -19,6 +19,18 @@ export interface SignalingOptions {
   iceServers?: () => IceServer[];
   /** When set, upgrades whose Origin is not listed are refused with 403. */
   allowedOrigins?: string[];
+  /**
+   * Open sockets allowed per client address before upgrades are refused with
+   * 429. Two tabs are legitimate; dozens are someone filling waiting rooms
+   * with ghosts. `Infinity` disables the cap.
+   */
+  maxConnectionsPerIp?: number;
+  /** How a client address is derived; defaults to the socket peer. */
+  clientIp?: (req: IncomingMessage) => string;
+  /**
+   * Ping interval. A peer that vanished without closing is reaped within two
+   * intervals, which is how long a newcomer can be stuck facing a ghost.
+   */
   heartbeatMs?: number;
   /** Length of one cigarette. Defaults to `CHAT_DURATION_MS`; tests shorten it. */
   chatDurationMs?: number;
@@ -31,10 +43,13 @@ export interface Signaling {
 
 const MAX_INVALID_FRAMES = 3;
 const MAX_PAYLOAD_BYTES = 64 * 1024;
+const DEFAULT_MAX_CONNECTIONS_PER_IP = 8;
+const DEFAULT_HEARTBEAT_MS = 15_000;
 
 interface ConnState {
   isAlive: boolean;
   invalidFrames: number;
+  ip: string;
 }
 
 /**
@@ -45,12 +60,16 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
   const path = options.path ?? '/api/ws';
   const iceServers = options.iceServers ?? (() => []);
   const allowedOrigins = options.allowedOrigins;
-  const heartbeatMs = options.heartbeatMs ?? 30_000;
+  const maxConnectionsPerIp = options.maxConnectionsPerIp ?? DEFAULT_MAX_CONNECTIONS_PER_IP;
+  const clientIp = options.clientIp ?? ((req) => req.socket.remoteAddress ?? 'unknown');
+  const heartbeatMs = options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
   const log = logger.child({ module: 'signaling' });
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
   const rooms = new RoomManager<WebSocket>({ durationMs: options.chatDurationMs });
   const states = new WeakMap<WebSocket, ConnState>();
+  /** Open sockets per client address, for the connection cap. */
+  const perIp = new Map<string, number>();
   /** One pending expiry per full room. `RoomManager` holds the deadline as data. */
   const timers = new Map<string, NodeJS.Timeout>();
 
@@ -67,14 +86,34 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
       return;
     }
 
-    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+    const ip = clientIp(req);
+    if ((perIp.get(ip) ?? 0) >= maxConnectionsPerIp) {
+      log.warn({ ip }, 'Rejected WebSocket upgrade: too many connections from one address');
+      reject(socket, 429, 'Too Many Requests');
+      return;
+    }
+
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      // Counted only once the handshake succeeded: `ws` aborts a malformed
+      // upgrade itself without ever calling back, and that must not leak a slot.
+      perIp.set(ip, (perIp.get(ip) ?? 0) + 1);
+      states.set(ws, { isAlive: true, invalidFrames: 0, ip });
+      wss.emit('connection', ws, req);
+    });
   }
 
   server.on('upgrade', onUpgrade);
 
-  wss.on('connection', (ws) => {
-    states.set(ws, { isAlive: true, invalidFrames: 0 });
+  function release(ws: WebSocket) {
+    const state = states.get(ws);
+    if (!state) return;
+    states.delete(ws);
+    const remaining = (perIp.get(state.ip) ?? 1) - 1;
+    if (remaining <= 0) perIp.delete(state.ip);
+    else perIp.set(state.ip, remaining);
+  }
 
+  wss.on('connection', (ws) => {
     ws.on('pong', () => {
       const state = states.get(ws);
       if (state) state.isAlive = true;
@@ -97,7 +136,11 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
       handleMessage(ws, parsed.data);
     });
 
-    ws.on('close', () => dropPeer(ws));
+    // `ws` always emits 'close' after 'error', so the slot is released once.
+    ws.on('close', () => {
+      dropPeer(ws);
+      release(ws);
+    });
     ws.on('error', (err) => {
       log.warn({ err }, 'WebSocket error');
       dropPeer(ws);
