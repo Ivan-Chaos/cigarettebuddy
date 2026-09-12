@@ -17,8 +17,6 @@ export const SLOGANS = [
   'does it ever get better?',
   'sometimes you need a break',
   'yolo, so either make it long or make it count',
-
-  // The rest, same register.
   "one more and then i'll stop",
   'the balcony is technically outside',
   "nobody's counting",
@@ -41,7 +39,7 @@ export const SLOGANS = [
   'the vending machine remembers you',
   'tar, nicotine, and a bit of company',
   'standing outside, thinking about nothing',
-  'the good conversations happen out here',
+  'the good conversations happen out here(debatable)',
   "it's the break, not the cigarette",
   'everyone out here is avoiding something',
   'two minutes of weather',
@@ -54,6 +52,7 @@ export const SLOGANS = [
   'spare one? of course not',
   "it's a lifestyle, not a decision",
   'later became now',
+  'fuck it, we ball',
   'the ashtray has seen things',
   'nothing lasts, especially this',
   'a cigarette is a unit of time',
@@ -65,13 +64,13 @@ export const SLOGANS = [
   'everybody is somebody else on a break',
   'the weather is doing something',
   'nine minutes past the hour, forever',
-  'we are all just waiting for the kettle',
   'there is a bin somewhere',
   'it goes quicker in the cold',
   'the pack said something about this',
   'no gods, no lighters',
   'a habit is just a plan you keep',
   'the smell stays longer than the smoke',
+  'touch some grass',
 ] as const;
 
 /** A slogan for this visit. Called from `load`, never during render. */

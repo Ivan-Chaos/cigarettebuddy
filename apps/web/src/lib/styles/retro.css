@@ -76,6 +76,11 @@
     line-height: 1.06;
     letter-spacing: -0.02em;
   }
+  /* Section headings inside a band: the same treatment a step down, so each
+     band does not re-declare the clamp inline. */
+  .rt-display--sm {
+    font-size: clamp(1.9rem, 3.2vw, 2.75rem);
+  }
 
   .rt-frame {
     max-width: var(--container-site);
@@ -314,6 +319,65 @@
   .rt-check:disabled {
     background-color: var(--color-putty);
     opacity: 0.6;
+  }
+
+  /* ---- disclosure -------------------------------------------------------- */
+
+  /* A native <details> dressed to match the kit. Native because the FAQ wants
+     independent rows that all start closed, which is exactly what <details>
+     already does -- so there is no state to hold, nothing to hydrate, and it
+     still works with JavaScript off. `summary` is already in app.css's cursor
+     selector, so the butt cursor comes along for free. */
+  .rt-faq > summary {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    list-style: none;
+  }
+  /* Safari draws its own triangle from a pseudo-element rather than a marker. */
+  .rt-faq > summary::-webkit-details-marker {
+    display: none;
+  }
+  .rt-faq > summary:hover {
+    background-color: color-mix(in srgb, var(--color-putty) 45%, transparent);
+  }
+  /* The first keyboard-operable thing on the landing page that is not a button,
+     so the ring is drawn inside the row -- an outset one would be clipped by
+     the list's border. */
+  .rt-faq > summary:focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: -2px;
+  }
+
+  /* [+] and [-] rather than a chevron that rotates: rotation is a modern-UI
+     tell, and a bracketed glyph in the mono face is what a text-mode interface
+     would have used. Content-swapped so the two states cannot drift apart. */
+  /* Fixed width rather than shrink-to-fit, so the answer below can be indented
+     to meet the question text with arithmetic instead of a guess: the body's
+     inset is padding + this width + the flex gap. */
+  .rt-faq__mark {
+    font-family: var(--font-mono);
+    color: var(--color-ember);
+    flex: none;
+    width: 2rem;
+  }
+  .rt-faq__mark::before {
+    content: '[+]';
+  }
+  .rt-faq[open] .rt-faq__mark::before {
+    content: '[-]';
+  }
+
+  /* 1.25rem of row padding + a 2rem marker + the 0.75rem gap: the answer starts
+     under the first letter of its question rather than under the [+]. */
+  .rt-faq__body {
+    padding: 0 1.25rem 1.25rem 4rem;
+  }
+  @media (width < 30rem) {
+    .rt-faq__body {
+      padding-left: 1.25rem;
+    }
   }
 
   /* ---- old web ----------------------------------------------------------- */

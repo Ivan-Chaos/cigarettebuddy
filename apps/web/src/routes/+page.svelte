@@ -1,32 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { resolve } from '$app/paths';
-  import ChatPanel from '$lib/components/ChatPanel.svelte';
   import {
-    AshtrayMeter,
     Band,
-    Badge88x31,
     Button,
-    Checkbox,
     CigaretteTimer,
-    Dialog,
     HitCounter,
     Link,
-    Marquee,
-    MenuButton,
-    Notice,
     Panel,
-    ProgressBar,
-    Rule,
-    StatusStrip,
     Sticker,
     Tag,
-    TextArea,
-    TextField,
-    Tooltip,
-    VideoPanel,
   } from '$lib/components/retro';
-  import type { ChatEntry } from '$lib/rtc/room.svelte';
 
   /* The one number on this page. There is no presence endpoint, so nothing
      here claims to know how many people are online -- this counts your own
@@ -43,118 +27,51 @@
     }
   });
 
-  /* What the five minutes are actually like, rather than what the product does.
-     One colour per beat, same idea as the numbered steps further down. */
-  const heroBeats: { text: string; tone: string }[] = [
-    { text: 'somebody will ask what you do', tone: 'bg-teal' },
-    { text: 'you will both mention the weather', tone: 'bg-berry' },
-    { text: 'one of you will have to go back in', tone: 'bg-gold' },
+  const noList = [
+    'no sign ups',
+    'no accounts',
+    'no emails',
+    'no notifications',
+    'no data stealing',
   ];
 
-  const facts: { label: string; value: string }[] = [
-    { label: 'people per room', value: '2' },
-    { label: 'accounts', value: 'none' },
-    { label: 'things stored', value: 'none' },
-    { label: 'a room id looks like', value: '7k2m9qx4tb' },
-    { label: 'chat travels', value: 'straight to the other person' },
-    { label: 'who else can see it', value: 'nobody' },
-  ];
-
+  /* Four beats of the experience. These used to explain the signalling server
+     and the data channel -- true, but that is what house rules is for. Titles
+     stay short on purpose: one that wraps makes its card header taller than
+     the other three and the row stops lining up. */
   const steps: { title: string; body: string }[] = [
     {
-      title: 'You press the button.',
-      body: 'Your browser asks for your camera and microphone. You can say no and still watch and type, though it is a strange way to meet someone.',
+      title: 'You press the button',
+      body: 'Your browser asks for the camera and the microphone. You can say no and still watch and type, which is a strange way to meet someone, but it works.',
     },
     {
-      title: 'The server looks for a spare seat.',
-      body: 'If somebody is already sitting in a room on their own, you get dropped in with them. If nobody is, you get a brand new room and you wait. You can send that room link to a specific person instead.',
+      title: "Somebody's out there",
+      body: 'If anyone is waiting on their own, you land in with them. If nobody is, you get the room to yourself for a minute, which is also how it goes in real life.',
     },
     {
-      title: 'The two of you connect directly.',
-      body: 'Once there are two of you, your browsers talk to each other rather than through us. The chat runs over the same connection, so nothing you type passes through the server at all.',
+      title: 'You talk',
+      body: 'Weather, work, whatever is going on. It is four in the morning somewhere, so there is always somebody having a worse night than you.',
     },
     {
-      title: 'Somebody goes back inside.',
-      body: 'Hang up and you land back here. If they leave first you stay put, and the next person out looking for a room gets matched to you.',
+      title: 'One of you goes back in',
+      body: 'Hang up and you are back here. If they leave first you stay put, and the next person out gets matched to you.',
     },
   ];
 
-  const statuses: {
-    tone: 'ok' | 'bad' | 'neutral';
-    status: string;
-    says: string;
-    means: string;
-  }[] = [
-    { tone: 'neutral', status: 'idle', says: 'Not connected', means: 'nothing has started yet' },
-    {
-      tone: 'neutral',
-      status: 'media',
-      says: 'Asking for your camera and microphone',
-      means: 'the browser is asking, not us',
-    },
-    {
-      tone: 'neutral',
-      status: 'connecting',
-      says: 'Reaching the server',
-      means: 'opening the socket',
-    },
-    {
-      tone: 'neutral',
-      status: 'waiting',
-      says: 'Waiting for somebody to turn up',
-      means: 'you have the room to yourself',
-    },
-    {
-      tone: 'neutral',
-      status: 'negotiating',
-      says: 'Handshaking with your buddy',
-      means: 'two of you, working out the route',
-    },
-    { tone: 'ok', status: 'connected', says: 'Connected', means: 'you are through' },
-    {
-      tone: 'bad',
-      status: 'full',
-      says: 'This room is full',
-      means: 'somebody got there before you',
-    },
-    { tone: 'bad', status: 'error', says: 'Disconnected', means: 'the connection dropped' },
-  ];
-
+  /* Three rules. Everything anyone actually needs to be told derives from one
+     of them, which is why there are three and not a list of edge cases. */
   const rules: { title: string; body: string }[] = [
     {
-      title: 'Two to a room.',
-      body: 'A third person who opens the same link gets turned away, so if you want a specific person, send them the link before somebody else wanders in.',
+      title: "don't be a cunt",
+      body: 'you are on video with a stranger who has done nothing to you. no slurs, no shouting, no getting weird. and if someone is being one at you, hang up. you owe them nothing and there is another one along in about four seconds.',
     },
     {
-      title: 'Nobody else is listening.',
-      body: 'The server passes along the details your browsers need to find each other and nothing else. Video, audio and messages go directly between the two of you.',
+      title: 'be old enough',
+      body: 'old enough to buy a pack where you live. we cannot check and we are not going to pretend we can, but if that is not you then this is not for you. it will still be here later.',
     },
     {
-      title: 'Nothing is kept.',
-      body: 'No recording, no transcript, no account, no email. When you both leave, the room stops existing.',
-    },
-    {
-      title: 'If it is weird, leave.',
-      body: 'Hang up ends it immediately, and the next person you get has nothing to do with the last one. There is no report button yet. That is a gap, not a decision.',
-    },
-    {
-      title: 'You do not have to smoke.',
-      body: 'Nobody checks. Standing outside counts. Sitting inside pretending to be outside also counts.',
-    },
-  ];
-
-  /* An example transcript, labelled as one on the page. The site never sees
-     real messages -- chat is peer to peer by design. */
-  const exampleChat: ChatEntry[] = [
-    { id: 'e1', kind: 'system', text: 'Somebody turned up.', at: '2026-03-04T21:14:00.000Z' },
-    { id: 'e2', kind: 'chat', text: 'you awake', at: '2026-03-04T21:14:22.000Z', mine: true },
-    { id: 'e3', kind: 'chat', text: 'regrettably', at: '2026-03-04T21:14:31.000Z' },
-    {
-      id: 'e4',
-      kind: 'chat',
-      text: 'it is raining on my side, what about yours',
-      at: '2026-03-04T21:15:02.000Z',
-      mine: true,
+      title: 'have a good time',
+      body: 'that is the whole point. you do not have to smoke, you do not have to be interesting, and you do not have to stay. four minutes of weather and back inside counts.',
     },
   ];
 
@@ -167,13 +84,56 @@
     'bg-moss text-paper',
   ];
 
-  // Parts bin demo state.
-  let demoRoomId = $state('7k2m9qx4tb');
-  let demoName = $state('');
-  let demoNote = $state('');
-  let demoMirror = $state(true);
-  let demoDevice = $state('a');
-  let demoOpen = $state(false);
+  /* Ember on the blunt one. */
+  const ruleTones = ['bg-ember text-paper', 'bg-gold text-ink', 'bg-moss text-paper'];
+
+  /* A picture of a chat, not a chat. Every string is a literal, the clock
+     included -- the real ChatPanel has to hold its timestamps back until
+     onMount because toLocaleTimeString disagrees between the server and the
+     browser, and this band is server-rendered. Literals never have that
+     problem. No "you" in here: the caption says *these people*, so the reader
+     is watching two strangers rather than standing in for one of them. */
+  const phoneChat: { from: 'left' | 'right' | 'system'; text: string }[] = [
+    { from: 'system', text: "it's on, big guy" },
+    { from: 'left', text: 'what we smokin' },
+    { from: 'right', text: 'whatever was in the drawer' },
+    { from: 'left', text: 'type shi' },
+  ];
+
+  const faq: { q: string; a: string }[] = [
+    {
+      q: 'do i have to smoke?',
+      a: 'no. nobody checks and nobody can tell. the cigarette is the excuse, not the entry fee. stand outside with a coffee and you are doing the same thing.',
+    },
+    {
+      q: "what if nobody's there?",
+      a: 'then you wait a bit. you get the room to yourself until somebody else comes out, and the moment they do you are in with them. it is four in the morning somewhere, so it is rarely long.',
+    },
+    {
+      q: 'what if i get a weirdo?',
+      a: 'hang up. that is the whole procedure. you owe a stranger nothing and there is another one along in about four seconds.',
+    },
+    {
+      q: 'can i pick who i get?',
+      a: 'no. no list to browse, no filters, no finding your mate. you get whoever else is outside at the same time as you, which is the entire point. if you wanted to talk to someone specific you would have texted them.',
+    },
+    {
+      q: 'how many people are in a room?',
+      a: 'two. a hard limit rather than a guideline: a third cannot get in even if they try.',
+    },
+    {
+      q: 'do i need an account?',
+      a: 'no. nothing to sign up for, nothing to log into, no email to hand over. you press the button and you are in.',
+    },
+    {
+      q: 'is any of this saved?',
+      a: 'no. the room exists while two people are in it and is gone the moment the second one leaves. the chat lives in your browser tab and dies with it. no recording, no transcript, nothing to go back to.',
+    },
+    {
+      q: 'who else can see this?',
+      a: "nobody. video and chat go straight from your browser to theirs. our server's whole job is introducing the two of you, and after that it has nothing to do with what you say. if your two networks refuse to talk directly it bounces off a relay to get there, still encrypted, still not something anyone is reading or keeping.",
+    },
+  ];
 </script>
 
 <!-- ============================ hero ============================ -->
@@ -194,18 +154,9 @@
         Find a Buddy
       </Button>
       <p class="rt-mono text-xs text-ink-soft">
-        Your camera turns on next. Two to a room, nobody else.
+        Start your break or join someone already on a break
       </p>
     </div>
-
-    <ul class="flex flex-col gap-1.5 pt-1">
-      {#each heroBeats as beat (beat.text)}
-        <li class="flex items-center gap-2.5 text-sm">
-          <span class="size-2.5 flex-none border border-ink {beat.tone}" aria-hidden="true"></span>
-          {beat.text}
-        </li>
-      {/each}
-    </ul>
   </div>
 
   <!-- The jpg's background is opaque white and so are the cigarettes in it, so
@@ -232,454 +183,375 @@
   </figure>
 </Band>
 
-<!-- Everything below is not converted to a band yet, so it keeps the sheet.
-     This wrapper goes away section by section. -->
-<div class="rt-frame my-6">
-  <div class="rt-frame__body flex flex-col gap-10">
-    <!-- ==================== main column + rail ==================== -->
-    <div class="rt-columns">
-      <div class="flex flex-col gap-10">
-        <!-- ---- what this is ---- -->
-        <section id="what" class="flex flex-col gap-4">
-          <h2>What this is</h2>
-          <div class="rt-measure flex flex-col gap-3">
-            <p>
-              A smoke break with a stranger, over video. You press one button, the server puts you
-              in a room with whoever is already waiting, and you talk until one of you goes back
-              inside.
-            </p>
-            <p>
-              There is no matching, no interests, no swiping and no queue you can skip. Whoever is
-              nearest the front of the line is who you get. Sometimes that is a delight and
-              sometimes it is a person eating a sandwich in silence.
-            </p>
-          </div>
+<!-- ========================= what this is ========================= -->
+<!-- Paper matches the body ground, which would normally make a band invisible.
+     It works here only because it is bracketed by panel above and putty below,
+     so the ground is never visible beside it and the three surfaces read as
+     three bands rather than two. -->
+<Band
+  id="what"
+  tone="paper"
+  innerClass="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)] lg:gap-14"
+>
+  <div class="flex flex-col gap-5">
+    <h2 class="rt-display rt-display--sm">What this is</h2>
 
-          <Panel tone="putty" dense class="max-w-md">
-            <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-              {#each facts as fact (fact.label)}
-                <dt>{fact.label}</dt>
-                <dd class="rt-mono">{fact.value}</dd>
-              {/each}
-            </dl>
-          </Panel>
-        </section>
+    <p class="text-2xl leading-snug sm:text-3xl">
+      ever had a smoke and caught yourself thinking &ldquo;man, i wish i had someone to yap to while
+      enjoying this delicious little treat&rdquo;?
+    </p>
 
-        <!-- ---- how it works ---- -->
-        <section id="how" class="flex flex-col gap-4">
-          <h2>How it works</h2>
-          <!-- Numbered because this genuinely is a sequence. -->
-          <ol class="border border-ink">
-            {#each steps as step, i (step.title)}
-              <li class="flex {i > 0 ? 'border-t border-ink' : ''}">
-                <span
-                  class="rt-mono flex w-10 flex-none items-start justify-center border-r border-ink px-2 py-2.5 text-sm {stepTones[
-                    i % stepTones.length
-                  ]}"
-                >
-                  {i + 1}
-                </span>
-                <div class="flex flex-col gap-1 px-3 py-2.5">
-                  <p class="font-semibold">{step.title}</p>
-                  <p class="text-sm text-ink-soft">{step.body}</p>
-                </div>
-              </li>
-            {/each}
-          </ol>
-        </section>
+    <p class="rt-measure text-lg">
+      well, congrats. you&rsquo;ve come to the right place. i think. get matched with random people
+      around the globe.
+    </p>
 
-        <!-- ---- the room ---- -->
-        <section id="room" class="flex flex-col gap-4">
-          <h2>The room, before you're in it</h2>
-          <p class="rt-measure">
-            This is the room, built out of the same parts as the page you're reading. It's dark here
-            because nobody is connected to a page. Two panels, two device buttons, a hang-up, and a
-            chat only the two of you can see.
-          </p>
+    <!-- The list of nos as chips rather than one long sentence: it is the most
+         scannable thing in the section and as prose it disappeared. -->
+    <ul class="flex flex-wrap gap-2">
+      {#each noList as item (item)}
+        <li><Tag class="px-2 py-1 text-sm">{item}</Tag></li>
+      {/each}
+    </ul>
+    <p class="rt-mono -mt-2 text-xs text-ink-soft">
+      (couldn&rsquo;t care less about your data, tbh)
+    </p>
 
-          <!-- Stacked rather than side by side: this section already sits inside
-             a column narrowed by the widget rail, so the real room's two-column
-             layout would squeeze the panels to nothing here. -->
-          <div class="flex flex-col gap-3">
-            <div class="rt-videogrid">
-              <VideoPanel stream={null} label="them" placeholder="nobody yet" />
-              <VideoPanel stream={null} label="you" muted placeholder="starting your camera" />
-            </div>
-            <StatusStrip tone="pending" label="Waiting for somebody to turn up" blink />
-            <ChatPanel messages={exampleChat} disabled onSend={() => {}} />
-          </div>
-          <p class="rt-mono text-xs text-ink-soft">
-            the transcript above is an example. the site never sees your messages.
-          </p>
+    <p class="border-t border-ink pt-4 text-xl">just you and some other guy on a smoke break.</p>
+  </div>
 
-          <p class="rt-measure pt-2">
-            The line above the room tells you which of eight things is currently happening.
-          </p>
-          <div class="overflow-x-auto">
-            <table class="rt-table">
-              <thead>
-                <tr>
-                  <th scope="col">status</th>
-                  <th scope="col">what it says</th>
-                  <th scope="col">what that means</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each statuses as row (row.status)}
-                  <tr>
-                    <td><Tag tone={row.tone} mono>{row.status}</Tag></td>
-                    <td>{row.says}</td>
-                    <td class="text-ink-soft">{row.means}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-          <p class="rt-mono text-xs text-ink-soft">
-            if the room says something else, it's quoting the error it got.
-          </p>
-        </section>
+  <!-- Sticker is the kit's slot for exactly this. Lazy because the band sits
+       below the fold and the gif is 380 KB. -->
+  <figure class="flex flex-col items-center gap-2 lg:items-start">
+    <Sticker
+      src="/gifs/nodding-smoking-monkey-approves.gif"
+      alt="A chimpanzee holding a cigarette, nodding slowly in approval."
+      size={270}
+      rotate={-2}
+    />
+    <figcaption class="rt-mono text-xs text-ink-soft">
+      your potential smoke buddy, not guaranteed tho
+    </figcaption>
+  </figure>
+</Band>
 
-        <!-- ---- house rules ---- -->
-        <section id="rules" class="flex flex-col gap-4">
-          <h2>House rules</h2>
-          <div class="border border-ink">
-            {#each rules as rule, i (rule.title)}
-              <div class="flex flex-col gap-1 px-3 py-2.5 {i > 0 ? 'border-t border-ink' : ''}">
-                <p class="font-semibold">{rule.title}</p>
-                <p class="rt-measure text-sm text-ink-soft">{rule.body}</p>
-              </div>
-            {/each}
-          </div>
-        </section>
-      </div>
-
-      <!-- ---- the widget rail ---- -->
-      <aside class="flex flex-col gap-4">
-        <Panel title="your visits" titleAs="h2" pixel dense strip="teal">
-          <HitCounter count={visits} label="visits from this browser" />
-        </Panel>
-
-        <Panel title="one cigarette" titleAs="h2" pixel dense strip="ember">
-          <!-- An illustration, not a clock: a fixed burn, so it reads as a
-             cigarette and renders identically on the server and the client. -->
-          <CigaretteTimer progress={0.32} />
-          <p class="mt-2 text-xs text-ink-soft">
-            About seven minutes, which is a decent length for a conversation with a stranger.
-          </p>
-        </Panel>
-
-        <Panel title="what this is not" titleAs="h2" pixel dense strip="gold">
-          <ul class="flex flex-col gap-1 text-xs text-ink-soft">
-            <li>not a dating app</li>
-            <li>not a group call</li>
-            <li>not recorded</li>
-            <li>not a place to sell anything</li>
-          </ul>
-        </Panel>
-
-        <div class="self-center pt-1">
-          <Sticker />
-        </div>
-      </aside>
+<!-- ========================= how it works ========================= -->
+<!-- Putty, with the cards on panel. That layering is not only for depth:
+     text-ink-soft on putty is 4.33:1 and fails AA, so the step bodies have to
+     sit on a panel fill rather than straight on the band. -->
+<Band id="how" tone="putty" innerClass="flex flex-col gap-7">
+  <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,15rem)] lg:gap-12">
+    <div class="flex flex-col gap-3">
+      <h2 class="rt-display rt-display--sm">How it works</h2>
+      <p class="rt-measure text-lg">
+        It takes about fifteen seconds to get into a room, and most of that is your browser asking
+        permission.
+      </p>
     </div>
 
-    <Rule variant="double" />
-
-    <!-- ========================= the parts bin ========================= -->
-    <section id="parts" class="flex flex-col gap-5">
-      <div class="flex flex-col gap-3">
-        <h2>The parts bin</h2>
-        <p class="rt-measure">
-          Every box, button and border on this page comes from a small kit built for this site. It's
-          here in full because a component only really exists once you can see all of its states at
-          once, and because it's the kind of page the old web was full of.
-        </p>
-        <p class="rt-measure text-sm text-ink-soft">
-          Hover a specimen to watch the shadow collapse. Tab to it to see the focus ring. The
-          caption under each one is the exact prop.
-        </p>
-      </div>
-
-      <Panel title="Surfaces" titleAs="h3" strip="teal">
-        {#snippet actions()}
-          <span class="rt-mono text-xs">drawer 1 of 6</span>
-        {/snippet}
-        <p class="rt-mono mb-3 text-xs text-ink-soft">Panel, Rule, Notice, Link</p>
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <figure class="rt-specimen">
-            <Panel class="w-full"><p class="text-sm">A plain box.</p></Panel>
-            <figcaption>&lt;Panel&gt;</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Panel title="With a strip" class="w-full"><p class="text-sm">A titled box.</p></Panel>
-            <figcaption>title="With a strip"</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Panel tone="putty" shadow class="w-full"><p class="text-sm">Putty, raised.</p></Panel>
-            <figcaption>tone="putty" shadow</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Panel tone="screen" class="w-full"><p class="text-sm">Screen tone.</p></Panel>
-            <figcaption>tone="screen"</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <div class="flex w-full flex-col gap-2">
-              <Rule />
-              <Rule variant="double" />
-              <Rule variant="dotted" />
-            </div>
-            <figcaption>variant="solid | double | dotted"</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <p class="text-sm">
-              An <Link href="#parts">ordinary link</Link> and an
-              <Link href="https://gifcities.org" external>external one</Link>.
-            </p>
-            <figcaption>&lt;Link external&gt;</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Notice class="w-full"><p>Something worth knowing.</p></Notice>
-            <figcaption>tone="info"</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Notice tone="warn" title="Careful" class="w-full"><p>Something to watch.</p></Notice>
-            <figcaption>tone="warn" title</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Notice tone="error" title="It broke" class="w-full"><p>What went wrong.</p></Notice>
-            <figcaption>tone="error"</figcaption>
-          </figure>
-        </div>
-      </Panel>
-
-      <Panel title="Controls" titleAs="h3" strip="berry">
-        {#snippet actions()}
-          <span class="rt-mono text-xs">drawer 2 of 6</span>
-        {/snippet}
-        <p class="rt-mono mb-3 text-xs text-ink-soft">Button, MenuButton, Dialog, Tooltip</p>
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <figure class="rt-specimen">
-            <Button variant="ember">Find me a stranger</Button>
-            <figcaption>variant="ember"</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Button>Copy the link</Button>
-            <figcaption>variant="default"</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Button variant="quiet">Leave</Button>
-            <figcaption>variant="quiet"</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Button variant="danger">Hang up</Button>
-            <figcaption>variant="danger"</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Button size="sm">Small</Button>
-            <figcaption>size="sm"</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Button size="lg">Large</Button>
-            <figcaption>size="lg"</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Button disabled>Unavailable</Button>
-            <figcaption>disabled</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Button href={resolve('/room')}>As a link</Button>
-            <figcaption>href</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <MenuButton
-              label="Microphone"
-              heading="Microphone"
-              value={demoDevice}
-              options={[
-                { value: 'a', label: 'Built-in microphone' },
-                { value: 'b', label: 'Headset' },
-                { value: 'c', label: 'Something unplugged', disabled: true },
-              ]}
-              onSelect={(v) => (demoDevice = v)}
-            />
-            <figcaption>options, onSelect</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Tooltip text="it copies the room link">
-              <Button size="sm">Hover me</Button>
-            </Tooltip>
-            <figcaption>&lt;Tooltip text&gt;</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <Button size="sm" onclick={() => (demoOpen = true)}>Open a dialog</Button>
-            <Dialog bind:open={demoOpen} title="Are you sure">
-              <p>It closes on Escape, and focus returns to the button that opened it.</p>
-              {#snippet footer()}
-                <Button onclick={() => (demoOpen = false)}>Close</Button>
-              {/snippet}
-            </Dialog>
-            <figcaption>bind:open, title</figcaption>
-          </figure>
-        </div>
-      </Panel>
-
-      <Panel title="Forms" titleAs="h3" strip="gold">
-        {#snippet actions()}
-          <span class="rt-mono text-xs">drawer 3 of 6</span>
-        {/snippet}
-        <p class="rt-mono mb-3 text-xs text-ink-soft">TextField, TextArea, Checkbox</p>
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <figure class="rt-specimen">
-            <TextField bind:value={demoRoomId} label="Room id" mono />
-            <figcaption>label, mono, bind:value</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <TextField
-              bind:value={demoName}
-              label="Your name"
-              hint="Optional. Nobody stores it."
-              placeholder="nobody"
-            />
-            <figcaption>hint, placeholder</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <TextField
-              value="not a room"
-              label="Room id"
-              error="Room ids are 4 to 32 characters."
-            />
-            <figcaption>error</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <TextField value="" label="Message" placeholder="waiting for somebody" disabled />
-            <figcaption>disabled</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <TextArea bind:value={demoNote} label="Say something" rows={3} />
-            <figcaption>&lt;TextArea rows&gt;</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <div class="flex flex-col gap-2">
-              <Checkbox bind:checked={demoMirror} label="Mirror my camera" />
-              <Checkbox checked={false} label="Unavailable" disabled />
-            </div>
-            <figcaption>bind:checked, disabled</figcaption>
-          </figure>
-        </div>
-      </Panel>
-
-      <Panel title="Data" titleAs="h3" strip="moss">
-        {#snippet actions()}
-          <span class="rt-mono text-xs">drawer 4 of 6</span>
-        {/snippet}
-        <p class="rt-mono mb-3 text-xs text-ink-soft">StatusStrip, Tag, ProgressBar</p>
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <figure class="rt-specimen">
-            <div class="flex w-full flex-col gap-2">
-              <StatusStrip tone="ok" label="Connected" />
-              <StatusStrip tone="pending" label="Waiting for somebody" blink />
-              <StatusStrip tone="bad" label="Disconnected" detail="failed" />
-            </div>
-            <figcaption>tone="ok | pending | bad"</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <div class="flex flex-wrap gap-1.5">
-              <Tag>neutral</Tag>
-              <Tag tone="ok">ok</Tag>
-              <Tag tone="warn">warn</Tag>
-              <Tag tone="bad">bad</Tag>
-              <Tag tone="ember">ember</Tag>
-            </div>
-            <figcaption>tone, mono</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <div class="flex w-full flex-col gap-2">
-              <ProgressBar value={0.35} label="ink" />
-              <ProgressBar value={0.6} tone="ember" segments={12} label="ember, 12 segments" />
-              <ProgressBar value={0.9} tone="moss" label="moss" />
-            </div>
-            <figcaption>value, segments, tone</figcaption>
-          </figure>
-        </div>
-      </Panel>
-
-      <Panel title="Room parts" titleAs="h3" strip="ember">
-        {#snippet actions()}
-          <span class="rt-mono text-xs">drawer 5 of 6</span>
-        {/snippet}
-        <p class="rt-mono mb-3 text-xs text-ink-soft">
-          VideoPanel, plus ChatPanel and DeviceControl, which compose the rest.
-        </p>
-        <div class="grid gap-3 sm:grid-cols-2">
-          <figure class="rt-specimen">
-            <VideoPanel stream={null} label="them" placeholder="nobody yet" class="w-full" />
-            <figcaption>stream, label, placeholder</figcaption>
-          </figure>
-          <figure class="rt-specimen">
-            <VideoPanel
-              stream={null}
-              label="you"
-              mirrored
-              ratio="4/3"
-              placeholder="camera off"
-              class="w-full"
-            />
-            <figcaption>mirrored, ratio="4/3"</figcaption>
-          </figure>
-        </div>
-      </Panel>
-
-      <Panel title="Old web" titleAs="h3" strip="berry">
-        {#snippet actions()}
-          <span class="rt-mono text-xs">drawer 6 of 6</span>
-        {/snippet}
-        <p class="rt-mono mb-3 text-xs text-ink-soft">gifs live in static/gifs. bring your own.</p>
-        <div class="flex flex-col gap-3">
-          <figure class="rt-specimen">
-            <Marquee class="w-full">
-              <span>this is a marquee.</span>
-              <span>it pauses when you hover it.</span>
-              <span>it stops entirely if you ask your system for less motion.</span>
-            </Marquee>
-            <figcaption>speed, direction, pauseOnHover</figcaption>
-          </figure>
-          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <figure class="rt-specimen">
-              <HitCounter count={417} label="visitors" />
-              <figcaption>count, digits, label</figcaption>
-            </figure>
-            <figure class="rt-specimen">
-              <div class="rt-badgewall">
-                <Badge88x31 title="Made in Svelte" label="MADE IN" sublabel="SVELTE" tone="berry" />
-                <Badge88x31 title="No cookies" label="NO" sublabel="COOKIES" tone="ember" />
-                <Badge88x31
-                  title="Best viewed outside"
-                  label="BEST VIEWED"
-                  sublabel="OUTSIDE"
-                  tone="gold"
-                />
-                <Badge88x31 title="Peer to peer" label="PEER 2 PEER" tone="teal" />
-              </div>
-              <figcaption>label, sublabel, tone</figcaption>
-            </figure>
-            <figure class="rt-specimen">
-              <Sticker size={84} />
-              <figcaption>src, rotate, size</figcaption>
-            </figure>
-            <figure class="rt-specimen">
-              <AshtrayMeter count={3} label="cigarettes" />
-              <figcaption>count, capacity, label</figcaption>
-            </figure>
-          </div>
-          <figure class="rt-specimen">
-            <div class="w-full max-w-72">
-              <CigaretteTimer progress={0.55} label="burning down" />
-            </div>
-            <figcaption>startedAt, durationMs, running</figcaption>
-          </figure>
-        </div>
-      </Panel>
-    </section>
+    <figure class="flex flex-col items-center gap-2 lg:items-start">
+      <Sticker
+        src="/assets/20-sigarettes-thumbnail.webp"
+        alt="A product render of a mouthpiece adapter that holds twenty cigarettes at once."
+        size={210}
+        rotate={2}
+      />
+      <figcaption class="rt-mono text-xs text-ink">not required. impressive, though.</figcaption>
+    </figure>
   </div>
-</div>
+
+  <!-- Numbered because this genuinely is a sequence. -->
+  <ol class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    {#each steps as step, i (step.title)}
+      <li class="flex flex-col border border-ink bg-panel">
+        <div
+          class="flex min-h-[2.75rem] items-center gap-2.5 border-b border-ink px-3 py-2 {stepTones[
+            i % stepTones.length
+          ]}"
+        >
+          <span class="rt-mono text-sm">{i + 1}</span>
+          <p class="text-sm font-semibold">{step.title}</p>
+        </div>
+        <p class="px-3 py-2.5 text-sm text-ink-soft">{step.body}</p>
+      </li>
+    {/each}
+  </ol>
+</Band>
+<!-- ========================= house rules ========================= -->
+<!-- Panel, because #how above is putty and a second putty band would merge
+     into it. Three big numbered rows rather than the four-card grid #how
+     uses -- three rules should not look like four steps. -->
+<Band id="rules" tone="panel" innerClass="flex flex-col gap-7">
+  <div class="flex flex-col gap-3">
+    <h2 class="rt-display rt-display--sm">House rules</h2>
+    <p class="rt-measure text-lg">
+      three of them. everything else you might be wondering about comes out of these.
+    </p>
+  </div>
+
+  <ol class="border border-ink">
+    {#each rules as rule, i (rule.title)}
+      <li
+        class="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:gap-6 {i > 0
+          ? 'border-t border-ink'
+          : ''}"
+      >
+        <span
+          class="rt-mono flex size-14 flex-none items-center justify-center border border-ink text-3xl {ruleTones[
+            i
+          ]}"
+        >
+          {i + 1}
+        </span>
+        <div class="flex flex-col gap-1.5">
+          <h3 class="text-2xl">{rule.title}</h3>
+          <p class="rt-measure text-lg text-ink-soft">{rule.body}</p>
+        </div>
+      </li>
+    {/each}
+  </ol>
+
+  <!-- The three rules again, demonstrated rather than stated. A phone and not
+       another figure because the gifs are two people in a call, and that is the
+       shape a call has. It is an illustration sitting inside a band, not the
+       site putting on device chrome -- VideoPanel's "no bezel screws" note
+       still holds for the site's own surfaces. The plate around it is what
+       keeps a 19rem phone from floating alone in a 62.5rem band. -->
+  <!-- Capped and centred: left to the band's full 62.5rem the plate is a wide
+       empty room with a 19rem phone marooned in the middle of it. At 34rem the
+       caption wraps to about three lines and the phone has a mat rather than a
+       field. -->
+  <div class="mx-auto w-full max-w-[34rem] border border-ink">
+    <div class="border-b border-ink bg-putty px-4 py-3">
+      <!-- Colour chips rather than coloured words: these pick up the numerals
+           from the list above, and gold as text on putty is nowhere near AA. -->
+      <p class="text-base leading-relaxed">
+        Example, these people are
+        <span
+          class="rt-mono inline-flex size-5 items-center justify-center border border-ink align-[-0.3em] text-xs {ruleTones[0]}"
+        >
+          1
+        </span>
+        not being cunts(probably),
+        <span
+          class="rt-mono inline-flex size-5 items-center justify-center border border-ink align-[-0.3em] text-xs {ruleTones[1]}"
+        >
+          2
+        </span>
+        are old enough(for sure),
+        <span
+          class="rt-mono inline-flex size-5 items-center justify-center border border-ink align-[-0.3em] text-xs {ruleTones[2]}"
+        >
+          3
+        </span>
+        having a good time(debatable). follow this example
+      </p>
+    </div>
+
+    <!-- Paper under a panel band: a half-tone darker, so the phone reads as
+         lying on something rather than floating on the band itself. -->
+    <div class="bg-paper px-4 py-8">
+      <div class="rt-raise mx-auto w-full max-w-[19rem] border border-ink bg-putty px-3 pt-3 pb-4">
+        <!-- The earpiece slot and the home button are the only round things on
+             this site, and they stay round: they are drawn hardware, not UI.
+             `rounded-full` is a literal infinity and never reads `--radius`,
+             which is 0rem everywhere else, so this does not fight the token. -->
+        <div class="mx-auto mb-2.5 h-1.5 w-14 rounded-full bg-ink/70"></div>
+
+        <div class="rt-inset overflow-hidden border border-ink bg-screen">
+          <div
+            class="rt-pixel flex items-center justify-between bg-ink px-1.5 py-1 text-[0.5rem] text-glow"
+          >
+            <span>CIGBUDDY</span>
+            <span>04:12</span>
+          </div>
+
+          <!-- Both gifs are heavy, 1.1 MB and 2.1 MB, and this band sits a long
+               way below the fold, so they are lazy: nothing downloads until
+               somebody actually scrolls this far. -->
+          <div class="relative aspect-[4/3]">
+            <img
+              src="/gifs/calmest_man_in.gif"
+              alt="A man on a webcam taking a long drag on a cigarette without changing expression."
+              width="220"
+              height="220"
+              loading="lazy"
+              decoding="async"
+              class="block h-full w-full object-cover object-center"
+            />
+            <span
+              class="rt-pixel absolute bottom-0 left-0 border-t border-r border-ink bg-ink px-1.5 py-1 text-[0.5625rem] text-glow"
+            >
+              one of them
+            </span>
+          </div>
+
+          <div class="relative aspect-[4/3] border-t border-ink">
+            <img
+              src="/gifs/old_guy_smoking.gif"
+              alt="An older man on a webcam smoking and looking pleased about it."
+              width="220"
+              height="219"
+              loading="lazy"
+              decoding="async"
+              class="block h-full w-full object-cover object-center"
+            />
+            <span
+              class="rt-pixel absolute bottom-0 left-0 border-t border-r border-ink bg-ink px-1.5 py-1 text-[0.5625rem] text-glow"
+            >
+              the other one
+            </span>
+          </div>
+
+          <!-- Both bubbles are light fills. On a screen-coloured ground there
+               is no dark side to put one on and still read it. -->
+          <div class="flex flex-col gap-1.5 border-t border-ink p-2">
+            {#each phoneChat as line (line.text)}
+              {#if line.from === 'system'}
+                <p class="rt-mono text-center text-[0.625rem] text-glow/70">{line.text}</p>
+              {:else}
+                <p
+                  class="max-w-[85%] border border-ink px-2 py-1 text-[0.6875rem] text-ink {line.from ===
+                  'right'
+                    ? 'self-end bg-putty'
+                    : 'self-start bg-panel'}"
+                >
+                  {line.text}
+                </p>
+              {/if}
+            {/each}
+          </div>
+        </div>
+
+        <div class="mx-auto mt-3 size-7 rounded-full border border-ink bg-panel"></div>
+      </div>
+    </div>
+  </div>
+</Band>
+
+<!-- ============================= faq ============================= -->
+<!-- Paper, between panel above and putty below, so no two adjacent bands share
+     a surface. Same ink-bordered hairline-separated list as the house rules
+     <ol> above it, so the two read as siblings rather than two inventions.
+
+     Native <details>: the rows open independently and all start closed, which
+     is what <details> does on its own. No state, nothing to hydrate, and it
+     still works with JavaScript off. -->
+<Band id="faq" tone="paper" innerClass="flex flex-col gap-7">
+  <div class="flex flex-col gap-3">
+    <h2 class="rt-display rt-display--sm">Questions</h2>
+    <p class="rt-measure text-lg">the ones people actually might ask</p>
+  </div>
+
+  <ul class="border border-ink">
+    {#each faq as item, i (item.q)}
+      <li class={i > 0 ? 'border-t border-ink' : ''}>
+        <details class="rt-faq">
+          <summary>
+            <span class="rt-faq__mark" aria-hidden="true"></span>
+            <span class="text-xl">{item.q}</span>
+          </summary>
+          <p class="rt-faq__body rt-measure text-lg text-ink-soft max-w-none">{item.a}</p>
+        </details>
+      </li>
+    {/each}
+  </ul>
+</Band>
+
+<!-- ========================== the widgets ========================== -->
+<!-- Was the sidebar next to #room and #rules. With both gone it has no column
+     to live in, so it becomes a row of its own. -->
+<Band tone="putty" innerClass="grid gap-4 sm:grid-cols-3">
+  <Panel title="your visits" titleAs="h2" pixel dense strip="teal">
+    <HitCounter count={visits} label="visits from this browser" />
+  </Panel>
+
+  <Panel title="one cigarette" titleAs="h2" pixel dense strip="ember">
+    <!-- An illustration, not a clock: a fixed burn, so it reads as a
+         cigarette and renders identically on the server and the client. -->
+    <CigaretteTimer progress={0.32} />
+    <p class="mt-2 text-xs text-ink-soft">
+      About seven minutes, which is a decent length for a conversation with a stranger.
+    </p>
+  </Panel>
+
+  <Panel title="what this is not" titleAs="h2" pixel dense strip="gold">
+    <ul class="flex flex-col gap-1 text-xs text-ink-soft">
+      <li>not a dating app</li>
+      <li>not a group call</li>
+      <li>not recorded</li>
+      <li>not a place to sell anything</li>
+    </ul>
+  </Panel>
+</Band>
+
+<!-- =========================== about me =========================== -->
+<!-- Panel: the band above is putty, and panel also continues the page's
+     panel/paper/putty rotation rather than interrupting it. Kept out of the
+     nav on purpose -- nobody navigates to a bio, they arrive at it by reaching
+     the end -- but it carries an id so it can still be linked to. -->
+<Band id="about" tone="panel" innerClass="flex flex-col gap-7">
+  <!-- Side by side from `sm` rather than `lg` like the other bands: their image
+       columns are 18-22rem and need the room, this one is 14rem and only strands
+       the portrait above a lone heading if it waits for 1024px. -->
+  <div
+    class="grid items-start gap-6 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:gap-8 lg:gap-12"
+  >
+    <!-- The portrait sits left, against the page's run of image-right bands.
+         Every other image here is a joke decorating an explanation; this one is
+         a face attached to a name, and that reads as a byline. The png is
+         opaque black to its edges, so it gets a screen fill and an ink border
+         for the same reason the hero's white-backed jpg does. -->
+    <figure class="flex max-w-[14rem] flex-col gap-2">
+      <div class="relative border border-ink bg-screen">
+        <img
+          src="/assets/murka_nakurka.png"
+          alt="A ginger and white cat with absurdly long ears and a lit cigarette in its mouth."
+          width="645"
+          height="598"
+          loading="lazy"
+          decoding="async"
+          class="block h-auto w-full"
+        />
+        <span
+          class="rt-pixel absolute bottom-0 left-0 border-t border-r border-ink bg-ink px-1.5 py-1 text-[0.5625rem] text-glow"
+        >
+          cigdev
+        </span>
+      </div>
+      <figcaption class="rt-mono text-xs text-ink-soft">literally me</figcaption>
+    </figure>
+
+    <div class="flex flex-col gap-4">
+      <h2 class="rt-display rt-display--sm">About me</h2>
+
+      <p class="text-2xl leading-snug">Hi, i&rsquo;m CigDev, creator of this website.</p>
+
+      <p class="rt-measure text-lg text-ink-soft">
+        the other night i had a brilliant idea to create this thing right here, idk how it will do
+        and if anyone would use it but decided fuck it, let&rsquo;s have a little fun and see how it
+        works out. i don&rsquo;t want to make a commercial product out of this, this is really just
+        a social experiment hastily put together, idk how long it will run for, but hope you enjoy
+        it while it lasts.
+      </p>
+    </div>
+  </div>
+
+  <!-- Same ink-bordered hairline-split box as the house rules list and the faq,
+       so the page's closing element rhymes with the two above it instead of
+       being a third kind of container. -->
+  <div class="border border-ink">
+    <p class="p-5 text-lg">
+      any questions? contact me at <a href="mailto:cigdev13@gmail.com">cigdev13@gmail.com</a>
+    </p>
+    <p class="border-t border-ink p-5 text-lg">
+      help run them servers! or just tell me your appreciation here:
+      <!-- nowrap so the hyphen in "ko-fi" is not treated as a break opportunity:
+           at narrow widths it otherwise splits into "ko-" / "fi.com/cigdev". The
+           URL is short enough that keeping it whole never overflows. -->
+      <Link href="https://ko-fi.com/cigdev" external class="whitespace-nowrap">
+        ko-fi.com/cigdev
+      </Link>
+    </p>
+  </div>
+</Band>

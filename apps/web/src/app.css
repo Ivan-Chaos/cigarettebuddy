@@ -360,3 +360,54 @@
     }
   }
 }
+
+/* ---- the 18+ gate --------------------------------------------------------
+   Three rules, kept here rather than in `retro.css` because the gate is not a
+   kit part -- it is one app-specific overlay -- and because the first two have
+   to be in the first stylesheet to work at all.
+
+   The gate markup is always server-rendered. Who sees it is decided before
+   first paint by the inline script in `app.html`, which sets `data-age="ok"`
+   on <html>. Rendering the gate only after onMount would show the page to a
+   minor for a beat; removing it after mount would flash it at every adult on
+   every load. This is the same pre-paint attribute trick used to kill the
+   dark-mode flash.
+   ------------------------------------------------------------------------- */
+
+:root[data-age='ok'] .ag-gate {
+  display: none;
+}
+
+/* Scroll is locked only while the gate is up. Scoped to the attribute being
+   absent, so a confirmed visitor is never locked even for a frame. */
+:root:not([data-age='ok']) body {
+  overflow: hidden;
+}
+
+/* The ugly one. Pack warnings are set in a heavy grotesque, and every OS ships
+   one, so this is a system stack and costs nothing -- the site's two real
+   webfonts (Silkscreen, Fraunces) are both wrong for a regulator's notice.
+
+   Applied to every descendant, not just the wrapper: `h1..h4` in @layer base
+   declare `font-family: var(--font-serif)` on the element itself, and a direct
+   declaration always beats an inherited one no matter which layer it sits in.
+   Inheriting from `.ag-face` alone left the heading in Fraunces, which reads
+   like a newspaper -- the exact opposite of the intent. Same reason
+   `font-variation-settings` is reset: WONK is Fraunces' quirk axis and has no
+   business here. */
+.ag-face,
+.ag-face * {
+  font-family:
+    'Arial Black', 'Arial Bold', 'Helvetica Black', 'Franklin Gothic Heavy', Impact, sans-serif;
+  font-variation-settings: normal;
+  font-weight: 900;
+}
+
+/* Tight and slightly squeezed, the way a warning crammed into a fixed box on a
+   pack is. `text-wrap: balance` comes from the base heading rule and would
+   centre the ragged edge; warnings set flush and full. */
+.ag-face h2 {
+  letter-spacing: -0.02em;
+  text-wrap: normal;
+  word-spacing: -0.03em;
+}

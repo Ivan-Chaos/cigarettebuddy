@@ -3,6 +3,7 @@
   import { env } from '$env/dynamic/public';
   import { page } from '$app/state';
   import { resolve } from '$app/paths';
+  import AgeGate from '$lib/components/AgeGate.svelte';
   import { Badge88x31, Button, NavBar, SiteShell, type NavItem } from '$lib/components/retro';
   import type { LayoutProps } from './$types';
 
@@ -27,8 +28,8 @@
       ? [
           { href: '#what', label: 'what this is' },
           { href: '#how', label: 'how it works' },
-          { href: '#room', label: 'the room' },
           { href: '#rules', label: 'house rules' },
+          { href: '#faq', label: 'faq' },
         ]
       : [
           { href: resolve('/'), label: 'home' },
@@ -84,6 +85,11 @@
       <div class="text-sm">
         <p>cigarettebuddy is two boxes and a stranger.</p>
         <p class="text-ink-soft">no cookies, no accounts, no analytics, no idea who you'll get.</p>
+        <!-- Kept out of the nav: the kit is developer-facing, not a section of
+             the site. Reachable, just not advertised. -->
+        <p class="mt-1">
+          <a href={resolve('/kit')} class="text-sm">the parts bin</a>
+        </p>
       </div>
       <div class="rt-badgewall">
         <Badge88x31 title="Made in Svelte" label="MADE IN" sublabel="SVELTE" tone="berry" />
@@ -99,3 +105,9 @@
     </div>
   {/snippet}
 </SiteShell>
+
+<!-- Mounted at the layout, not on the landing page, so it covers every entry
+     point in one place: `/`, `/room/[[id]]`, `/kit` and +error.svelte all
+     render through here. Gating only the landing page would be bypassed by
+     deep-linking straight into a room. -->
+<AgeGate />

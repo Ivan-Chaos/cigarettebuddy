@@ -24,9 +24,10 @@
 
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import type { HTMLAttributes } from 'svelte/elements';
   import { cn } from '$lib/utils';
 
-  interface Props {
+  interface Props extends HTMLAttributes<HTMLElement> {
     tone?: BandTone;
     /** Matches `SiteShell`'s wider frame, so the room page stays aligned. */
     wide?: boolean;
@@ -46,10 +47,13 @@
     class: className,
     innerClass,
     children,
+    ...rest
   }: Props = $props();
 </script>
 
-<section data-slot="retro-band" class={cn(bandVariants({ tone, divide }), className)}>
+<!-- `rest` carries `id` through, so a band can be its own nav anchor rather
+     than wrapping a second <section> just to hold one. -->
+<section data-slot="retro-band" class={cn(bandVariants({ tone, divide }), className)} {...rest}>
   <div class={cn('rt-band__inner', wide && 'rt-band__inner--wide', innerClass)}>
     {@render children()}
   </div>
