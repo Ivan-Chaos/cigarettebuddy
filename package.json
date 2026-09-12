@@ -1,6 +1,6 @@
 {
   "name": "cigarettebuddy",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.17.0",
@@ -26,6 +26,10 @@
     "docker:reset": "docker compose down -v --remove-orphans",
     "docker:logs": "docker compose logs -f api web",
     "docker:migrate": "docker compose run --rm migrate",
+    "docker:prod": "docker compose -f docker-compose.yml -f docker-compose.prod.yml",
+    "docker:prod:up": "pnpm docker:prod up -d --build",
+    "docker:prod:down": "pnpm docker:prod down",
+    "docker:prod:logs": "pnpm docker:prod logs -f caddy api web",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:reset": "docker compose down -v && docker compose up -d postgres",
@@ -33,7 +37,6 @@
     "db:migrate": "pnpm --filter @cigbuddy/db migrate",
     "db:push": "pnpm --filter @cigbuddy/db push",
     "db:studio": "pnpm --filter @cigbuddy/db studio",
-    "db:seed": "pnpm --filter @cigbuddy/db seed",
     "clean": "pnpm --recursive exec rm -rf dist .svelte-kit node_modules && rm -rf node_modules"
   },
   "devDependencies": {

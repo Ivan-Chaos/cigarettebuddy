@@ -1,0 +1,68 @@
+# Production overlay for a single VPS. Always used together with the base file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# What it changes:
+#   - Caddy terminates TLS for $DOMAIN (Let's Encrypt, automatic) and is the
+#     only thing listening on the host: `/api/*` goes to the API, everything
+#     else to the web app. That makes the site a single origin, so the browser
+#     opens the signaling socket on wss://$DOMAIN/api/ws by itself.
+#   - The Postgres, API and web host ports from the base file are removed.
+#   - Origins point at https://$DOMAIN and the API trusts one proxy hop, so
+#     logs and the per-address connection cap see real client addresses.
+#   - Container logs are capped so a busy month cannot fill the disk.
+#
+# Requires DOMAIN in the root .env (see .env.example).
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: cigbuddy-caddy
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp' # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    <<: *logging
+
+  postgres:
+    ports: !reset []
+    <<: *logging
+
+  migrate:
+    <<: *logging
+
+  api:
+    ports: !reset []
+    environment:
+      CORS_ORIGIN: https://${DOMAIN:?set DOMAIN in .env}
+      TRUST_PROXY: '1'
+    <<: *logging
+
+  web:
+    ports: !reset []
+    environment:
+      ORIGIN: https://${DOMAIN:?set DOMAIN in .env}
+      # Same origin as the page: the client derives wss://$DOMAIN/api/ws.
+      PUBLIC_SIGNALING_URL: ''
+    <<: *logging
+
+volumes:
+  caddy-data:
+  caddy-config:

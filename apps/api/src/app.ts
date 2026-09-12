@@ -11,6 +11,9 @@ export function createApp(): Express {
   const app = express();
 
   app.disable('x-powered-by');
+  // Behind Caddy/nginx `req.ip` and `req.protocol` come from X-Forwarded-*;
+  // off by default so a direct client cannot forge them.
+  app.set('trust proxy', env.trustProxy);
   app.use(helmet());
   app.use(cors({ origin: env.corsOrigins, credentials: true }));
   app.use(express.json({ limit: '1mb' }));

@@ -1,0 +1,16 @@
+# Used by the `caddy` service in docker-compose.prod.yml. DOMAIN comes from
+# the container environment. Caddy obtains and renews the certificate itself
+# and upgrades WebSockets without any extra directive.
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Room signaling (WebSocket) and the health/ICE endpoints.
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	# The SvelteKit server renders everything else.
+	handle {
+		reverse_proxy web:3000
+	}
+}

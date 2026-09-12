@@ -8,6 +8,13 @@
       "when": 1788784867832,
       "tag": "0000_chubby_jetstream",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789243890322,
+      "tag": "0001_drop_users",
+      "breakpoints": true
     }
   ]
 }

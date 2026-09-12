@@ -3,6 +3,7 @@ import { env } from './env.js';
 import { iceServersFromEnv } from './ice.js';
 import { logger } from './logger.js';
 import { closeDatabase } from './db.js';
+import { clientIpFrom } from './lib/client-ip.js';
 import { attachSignaling } from './signaling/attach.js';
 
 const app = createApp();
@@ -12,10 +13,13 @@ const server = app.listen(env.API_PORT, env.API_HOST, () => {
 
 // Browsers open the signaling socket directly, so in production only the
 // configured web origins may upgrade. In development the Vite proxy sits in
-// between and the Origin check would only get in the way.
+// between and the Origin check would only get in the way — and every socket
+// would share the proxy's address, so the per-IP cap is lifted there too.
 const signaling = attachSignaling(server, {
   iceServers: iceServersFromEnv,
   allowedOrigins: env.isProduction ? env.corsOrigins : undefined,
+  clientIp: (req) => clientIpFrom(req, env.trustProxy),
+  maxConnectionsPerIp: env.isProduction ? undefined : Infinity,
 });
 
 async function shutdown(signal: string) {
