@@ -2,8 +2,9 @@
   import { cn } from '$lib/utils';
 
   interface Props {
-    /** Presentational only -- the caller owns where the number comes from. */
-    count: number;
+    /** Presentational only -- the caller owns where the number comes from.
+     *  `null` is "not known yet": dashes, never a made-up zero. */
+    count: number | null;
     digits?: number;
     label?: string;
     class?: string;
@@ -12,7 +13,19 @@
   let { count, digits = 6, label, class: className }: Props = $props();
 
   const cells = $derived(
-    Math.max(0, Math.floor(count)).toString().padStart(digits, '0').slice(-digits).split(''),
+    count === null
+      ? Array.from({ length: digits }, () => '-')
+      : Math.max(0, Math.floor(count)).toString().padStart(digits, '0').slice(-digits).split(''),
+  );
+
+  const description = $derived(
+    count === null
+      ? label
+        ? `${label} unavailable`
+        : 'unavailable'
+      : label
+        ? `${count} ${label}`
+        : String(count),
   );
 </script>
 
@@ -23,7 +36,7 @@
     data-slot="retro-counter"
     class="flex gap-px border border-ink bg-screen p-px"
     role="img"
-    aria-label={label ? `${count} ${label}` : String(count)}
+    aria-label={description}
   >
     {#each cells as digit, i (i)}
       <span

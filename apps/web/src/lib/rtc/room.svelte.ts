@@ -4,6 +4,7 @@ import {
   type ChatMessage,
   type ClientMessage,
   type IceServer,
+  type ReportReason,
   type ServerMessage,
 } from '@cigbuddy/shared';
 import { readLastRoom, writeLastRoom } from '$lib/storage';
@@ -109,8 +110,9 @@ export class RoomSession {
   }
 
   /** Flags the other person, then leaves. Same socket, so the report goes first. */
-  report(): void {
-    this.signaling?.send({ type: 'report' });
+  report(reason: ReportReason, note?: string): void {
+    const trimmed = note?.trim();
+    this.signaling?.send({ type: 'report', reason, ...(trimmed ? { note: trimmed } : {}) });
     this.destroy();
   }
 

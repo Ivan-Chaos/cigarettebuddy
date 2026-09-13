@@ -6,9 +6,10 @@
   import MicOffIcon from '@lucide/svelte/icons/mic-off';
   import VideoIcon from '@lucide/svelte/icons/video';
   import VideoOffIcon from '@lucide/svelte/icons/video-off';
-  import { CHAT_DURATION_MS } from '@cigbuddy/shared';
+  import { CHAT_DURATION_MS, type ReportReason } from '@cigbuddy/shared';
   import ChatPanel from '$lib/components/ChatPanel.svelte';
   import DeviceControl from '$lib/components/DeviceControl.svelte';
+  import ReportDialog from '$lib/components/ReportDialog.svelte';
   import {
     AshtrayMeter,
     Button,
@@ -17,6 +18,7 @@
     Notice,
     Panel,
     StatusStrip,
+    Tooltip,
     VideoPanel,
   } from '$lib/components/retro';
   import { RoomSession, type RoomStatus } from '$lib/rtc/room.svelte';
@@ -61,6 +63,14 @@
         : 'Light another one',
   );
 
+  // The other side has voted and this one has not: the one moment the room
+  // actually wants something from you, so it gets a notice, a blink and a tip.
+  const attention = $derived(
+    room.status === 'connected' && room.theyWantAnother && !room.iWantAnother,
+  );
+
+  let reportOpen = $state(false);
+
   onMount(() => {
     void (data.roomId ? room.join(data.roomId) : room.joinRandom());
 
@@ -93,24 +103,23 @@
     void goto(resolve('/'), { replaceState: true });
   }
 
-  function report() {
-    room.report();
+  function report(reason: ReportReason, note?: string) {
+    room.report(reason, note);
     void goto(resolve('/'), { replaceState: true });
   }
 </script>
 
 <div class="flex flex-col gap-4">
+  <!-- The way out lives in the button row with the other controls; a second
+       small Leave up here only split attention between the two. -->
   <Panel dense>
-    <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-      <h1 class="text-xl">
-        {#if room.roomId}
-          Balcony # <code class="border border-ink bg-putty px-1 py-0.5">{room.roomId}</code>
-        {:else}
-          Finding you a room
-        {/if}
-      </h1>
-      <Button variant="quiet" size="sm" onclick={leave}>Leave</Button>
-    </div>
+    <h1 class="text-xl">
+      {#if room.roomId}
+        Balcony # <code class="border border-ink bg-putty px-1 py-0.5">{room.roomId}</code>
+      {:else}
+        Finding you a room
+      {/if}
+    </h1>
   </Panel>
 
   <StatusStrip
@@ -180,7 +189,7 @@
           <Notice tone="warn" title="That's the break.">
             <p>Ten minutes is ten minutes. The room's gone; your camera isn't.</p>
             <div class="flex flex-wrap items-center gap-3 pt-1">
-              <Button variant="ember" onclick={() => void room.next()}>Next one</Button>
+              <Button variant="ember" onclick={() => void room.next()}>Find next buddy</Button>
               <Button variant="quiet" onclick={leave}>Leave</Button>
             </div>
           </Notice>
@@ -191,6 +200,18 @@
             <p>{room.error}</p>
             <div class="pt-1">
               <Button onclick={() => void room.rejoin()}>Try again</Button>
+            </div>
+          </Notice>
+        {/if}
+
+        {#if attention}
+          <Notice tone="warn" title="They want another one.">
+            <p>
+              Your buddy's already reaching for the pack. Light one too and the clock goes back to
+              ten.
+            </p>
+            <div class="pt-1">
+              <Button variant="ember" onclick={() => room.lightAnother()}>Light one too</Button>
             </div>
           </Notice>
         {/if}
@@ -219,26 +240,46 @@
             onSelect={(id) => void room.selectVideoDevice(id)}
           />
           {#if room.status === 'connected'}
-            <Button
-              variant={room.theyWantAnother && !room.iWantAnother ? 'ember' : 'default'}
-              disabled={room.iWantAnother}
-              onclick={() => room.lightAnother()}
-            >
-              {lightLabel}
-            </Button>
+            {#if attention}
+              <Tooltip text="Your buddy already voted. Light one too and the clock resets.">
+                {#snippet trigger(props)}
+                  <Button
+                    {...props}
+                    variant="ember"
+                    class="rt-blink"
+                    onclick={() => room.lightAnother()}
+                  >
+                    {lightLabel}
+                  </Button>
+                {/snippet}
+              </Tooltip>
+            {:else}
+              <Button disabled={room.iWantAnother} onclick={() => room.lightAnother()}>
+                {lightLabel}
+              </Button>
+            {/if}
           {/if}
           {#if room.status !== 'expired'}
-            <Button onclick={() => void room.next()}>Next one</Button>
-            <Button variant="danger" onclick={report}>Leave and report</Button>
+            <Button onclick={() => void room.next()}>Find next buddy</Button>
+            <Button onclick={leave}>Leave</Button>
+            <Button variant="danger-solid" onclick={() => (reportOpen = true)}>
+              Leave and report
+            </Button>
           {/if}
         </div>
       </section>
 
-      <ChatPanel
-        messages={room.messages}
-        disabled={!room.chatReady}
-        onSend={(text) => room.sendChat(text)}
-      />
+      <!-- Boxed so the chat scrolls instead of stretching the page; see .rt-rail. -->
+      <div class="rt-rail">
+        <ChatPanel
+          class="absolute inset-0"
+          messages={room.messages}
+          disabled={!room.chatReady}
+          onSend={(text) => room.sendChat(text)}
+        />
+      </div>
     </div>
   {/if}
 </div>
+
+<ReportDialog bind:open={reportOpen} onSubmit={report} />

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { reportNoteSchema, reportReasonSchema } from './report.js';
 
 /**
  * Wire contract for the 1:1 video rooms. The signaling WebSocket only relays
@@ -60,8 +61,12 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('leave') }),
   /** Vote to reset the clock. The room relights once both peers have voted. */
   z.object({ type: z.literal('light-another') }),
-  /** Flag the other peer. Logged server-side; nothing more yet. */
-  z.object({ type: z.literal('report') }),
+  /** Flag the other peer. Stored server-side; no frame comes back. */
+  z.object({
+    type: z.literal('report'),
+    reason: reportReasonSchema,
+    note: reportNoteSchema.optional(),
+  }),
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;

@@ -10,6 +10,7 @@ import {
   type SignalingErrorCode,
 } from '@cigbuddy/shared';
 import { logger } from '../logger.js';
+import type { ReportRecord } from '../reports/store.js';
 import { RoomManager, type JoinResult } from './rooms.js';
 
 export interface SignalingOptions {
@@ -34,11 +35,27 @@ export interface SignalingOptions {
   heartbeatMs?: number;
   /** Length of one cigarette. Defaults to `CHAT_DURATION_MS`; tests shorten it. */
   chatDurationMs?: number;
+  /** Called once per report frame, after it has been logged. Storing it is the caller's job. */
+  onReport?: (report: ReportRecord) => void;
+  /**
+   * Called once per finished cigarette: the clock ran out with both peers
+   * still there, or both voted to light another one.
+   */
+  onBreakCompleted?: (event: BreakCompleted) => void;
+}
+
+export interface BreakCompleted {
+  roomId: string;
+  via: 'expired' | 'relit';
+  /** Cigarettes finished in this pairing so far, including this one for `relit`. */
+  lit: number;
 }
 
 export interface Signaling {
   close(): Promise<void>;
   roomCount(): number;
+  /** Open signaling sockets, which is what "online now" means. */
+  connectionCount(): number;
 }
 
 const MAX_INVALID_FRAMES = 3;
@@ -63,6 +80,7 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
   const maxConnectionsPerIp = options.maxConnectionsPerIp ?? DEFAULT_MAX_CONNECTIONS_PER_IP;
   const clientIp = options.clientIp ?? ((req) => req.socket.remoteAddress ?? 'unknown');
   const heartbeatMs = options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
+  const { onReport, onBreakCompleted } = options;
   const log = logger.child({ module: 'signaling' });
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
@@ -179,7 +197,7 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
       case 'light-another':
         return handleVote(ws);
       case 'report':
-        return handleReport(ws);
+        return handleReport(ws, msg);
       case 'offer':
       case 'answer':
       case 'ice-candidate':
@@ -247,10 +265,14 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
 
   function expire(roomId: string) {
     timers.delete(roomId);
+    // Read the clock before `expire()` forgets it: the count is the only bit worth keeping.
+    const lit = rooms.timerState(roomId)?.lit ?? 0;
     const peers = rooms.expire(roomId);
     if (peers.length === 0) return;
 
     log.info({ roomId, peers: peers.length }, 'Room expired');
+    // Two people, ten minutes, nobody left: that is a smoke break that worked.
+    if (peers.length === 2) onBreakCompleted?.({ roomId, via: 'expired', lit });
     for (const peer of peers) {
       send(peer.conn, { type: 'expired' });
       peer.conn.close(SIGNALING_CLOSE_CODES.expired, 'break over');
@@ -271,22 +293,35 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
 
     const roomId = rooms.peerOf(ws)?.roomId;
     if (!roomId) return;
-    if (result.relit) log.info({ roomId, lit: result.state.lit }, 'Relit');
+    if (result.relit) {
+      log.info({ roomId, lit: result.state.lit }, 'Relit');
+      // Both wanted more: the cigarette just finished counts as a good one.
+      onBreakCompleted?.({ roomId, via: 'relit', lit: result.state.lit });
+    }
     syncTimer(roomId);
   }
 
-  /** Nothing is stored yet; the log line is the whole report. */
-  function handleReport(ws: WebSocket) {
+  /**
+   * Logs the report and hands it to `onReport`. No frame goes back and the room
+   * stays standing: the reporter leaves on their own right after.
+   */
+  function handleReport(ws: WebSocket, msg: Extract<ClientMessage, { type: 'report' }>) {
     const peer = rooms.peerOf(ws);
     if (!peer) {
       sendError(ws, 'not_in_room', 'Join a room before reporting anyone');
       return;
     }
 
-    log.warn(
-      { roomId: peer.roomId, reporterId: peer.id, reportedId: rooms.otherPeer(ws)?.id ?? null },
-      'Peer reported',
-    );
+    const report: ReportRecord = {
+      roomId: peer.roomId,
+      reporterId: peer.id,
+      reportedId: rooms.otherPeer(ws)?.id ?? null,
+      reason: msg.reason,
+      // The schema trims, so an all-spaces note arrives empty.
+      note: msg.note ? msg.note : null,
+    };
+    log.warn(report, 'Peer reported');
+    onReport?.(report);
   }
 
   function relay(
@@ -347,6 +382,7 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
 
   return {
     roomCount: () => rooms.roomCount(),
+    connectionCount: () => wss.clients.size,
     close() {
       clearInterval(heartbeat);
       for (const pending of timers.values()) clearTimeout(pending);

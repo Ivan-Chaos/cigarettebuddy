@@ -4,10 +4,12 @@ import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import { env } from './env.js';
 import { logger } from './logger.js';
-import { apiRouter } from './routes/index.js';
+import { createApiRouter, type ApiRouterOptions } from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 
-export function createApp(): Express {
+export type AppOptions = ApiRouterOptions;
+
+export function createApp(options: AppOptions = {}): Express {
   const app = express();
 
   app.disable('x-powered-by');
@@ -20,7 +22,7 @@ export function createApp(): Express {
   app.use(express.urlencoded({ extended: true }));
   app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === '/api/health/live' } }));
 
-  app.use('/api', apiRouter);
+  app.use('/api', createApiRouter(options));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

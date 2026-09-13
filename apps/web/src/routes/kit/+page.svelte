@@ -127,6 +127,10 @@
         <figcaption>variant="danger"</figcaption>
       </figure>
       <figure class="rt-specimen">
+        <Button variant="danger-solid">Leave and report</Button>
+        <figcaption>variant="danger-solid"</figcaption>
+      </figure>
+      <figure class="rt-specimen">
         <Button size="sm">Small</Button>
         <figcaption>size="sm"</figcaption>
       </figure>

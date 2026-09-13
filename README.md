@@ -16,7 +16,7 @@ apps/
             + Dockerfile (also provides the migrate entrypoint)
 packages/
   shared/   Zod schemas & types shared by web and api (the API contract)
-  db/       Drizzle schema (empty for now), client, migrations
+  db/       Drizzle schema (reports, counters), client, migrations
   env/      Layered .env loading (shared root file + per-app file)
 ```
 
@@ -206,15 +206,17 @@ whose `Origin` is listed in `CORS_ORIGIN` when running in production).
 
 ## API
 
-| Method | Path                | Notes                                            |
-| ------ | ------------------- | ------------------------------------------------ |
-| GET    | `/api/health/live`  | Liveness — process only                          |
-| GET    | `/api/health/ready` | Readiness — also pings Postgres, 503 if down     |
-| GET    | `/api/ice`          | ICE servers browsers get; dev only               |
-| WS     | `/api/ws`           | Room signaling — see [Video rooms](#video-rooms) |
+| Method | Path                | Notes                                                 |
+| ------ | ------------------- | ----------------------------------------------------- |
+| GET    | `/api/health/live`  | Liveness — process only                               |
+| GET    | `/api/health/ready` | Readiness — also pings Postgres, 503 if down          |
+| GET    | `/api/ice`          | ICE servers browsers get; dev only                    |
+| GET    | `/api/stats`        | `{ online, breaks }` for the front page; never cached |
+| WS     | `/api/ws`           | Room signaling — see [Video rooms](#video-rooms)      |
 
-That is the whole surface: nothing is stored yet, so there are no resource
-routes. The Postgres pipeline stays in place for the first real table.
+That is the whole surface. Postgres holds two tables, `reports` and
+`counters`, both written from the signaling side; nothing is read back over
+HTTP except the two numbers in `/api/stats`.
 
 Errors always come back as `{ error: { message, code, details? } }` — see
 `apiErrorSchema` in `packages/shared`.
@@ -247,13 +249,20 @@ accounts, no database: rooms live in the API's memory and vanish when empty.
 - When the clock hits zero the server sends `expired` to both, closes the
   sockets with code `4004` and deletes the room. Each side keeps its camera and
   gets a **Next one** button.
-- **Next one** leaves and asks for a random match again, sending the room just
-  left as `avoidRoomId` so you are never re-seated with the same person. The id
-  comes from `localStorage["cb:last-room"]`, which is written on every join and
-  every exit. It is best-effort: it stops _you_ re-entering the room _you_
-  left, not the survivor being matched into the fresh room you moved to.
-- **Leave and report** sends `report` before leaving. For now the API only
-  logs `{ roomId, reporterId, reportedId }`; nothing is stored.
+- **Find next buddy** leaves and asks for a random match again, sending the
+  room just left as `avoidRoomId` so you are never re-seated with the same
+  person. The id comes from `localStorage["cb:last-room"]`, which is written on
+  every join and every exit. It is best-effort: it stops _you_ re-entering the
+  room _you_ left, not the survivor being matched into the fresh room you moved
+  to.
+- **Leave and report** asks for a reason (and a note, required for "Something
+  else") and sends `report { reason, note? }` before leaving. The API logs it
+  and writes a row to `reports`; no frame goes back and the room stays up for
+  the other person.
+- **Smoke breaks** are counted in the `counters` table: every finished
+  cigarette is one — the ten minutes ran out with both people still there, or
+  both voted to light another. The front page reads it from `/api/stats`
+  together with the number of open signaling sockets ("online now").
 - A refresh is a leave and a join, so the cigarette starts over.
 - Chat messages travel peer to peer over the data channel, so they never touch
   the server and only work once the two browsers are connected.

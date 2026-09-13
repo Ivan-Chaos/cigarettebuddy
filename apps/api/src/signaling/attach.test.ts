@@ -11,10 +11,17 @@ const ICE = [{ urls: ['stun:test.example.com:3478'] }];
 let server: Server;
 let signaling: Signaling;
 let baseUrl: string;
+const onReport = vi.fn();
+const onBreakCompleted = vi.fn();
 
 beforeAll(async () => {
   server = createServer(createApp());
-  signaling = attachSignaling(server, { iceServers: () => ICE, heartbeatMs: 60_000 });
+  signaling = attachSignaling(server, {
+    iceServers: () => ICE,
+    heartbeatMs: 60_000,
+    onReport,
+    onBreakCompleted,
+  });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   baseUrl = `ws://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -26,7 +33,10 @@ afterAll(async () => {
 
 // Client-side close is asynchronous, so a lone peer from the previous test can
 // still be seated when the next one starts, and `join-random` would find it.
-beforeEach(() => vi.waitFor(() => expect(signaling.roomCount()).toBe(0)));
+beforeEach(async () => {
+  await vi.waitFor(() => expect(signaling.roomCount()).toBe(0));
+  vi.clearAllMocks();
+});
 
 function connect(path = '/api/ws', url = baseUrl): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
@@ -297,6 +307,8 @@ describe('the clock', () => {
     send(a, { type: 'light-another' });
     expect(await onA).toMatchObject({ lit: 0, wantsAnother: [joinedA.peerId] });
     expect(await onB).toMatchObject({ lit: 0, wantsAnother: [joinedA.peerId] });
+    // One vote is not a finished cigarette.
+    expect(onBreakCompleted).not.toHaveBeenCalled();
 
     onA = waitFor(a, 'timer');
     onB = waitFor(b, 'timer');
@@ -306,6 +318,8 @@ describe('the clock', () => {
     expect(relitA.remainingMs).toBeGreaterThan(CHAT_DURATION_MS - 1000);
     expect(await onB).toMatchObject({ lit: 1, wantsAnother: [] });
     expect(joinedB.peerId).not.toBe(joinedA.peerId);
+    expect(onBreakCompleted).toHaveBeenCalledTimes(1);
+    expect(onBreakCompleted).toHaveBeenCalledWith({ roomId: 'vote-test', via: 'relit', lit: 1 });
 
     closeAll(a, b);
   });
@@ -327,22 +341,65 @@ describe('the clock', () => {
     const a = await connect();
     send(a, { type: 'light-another' });
     expect(await nextMessage(a)).toMatchObject({ type: 'error', code: 'not_in_room' });
-    send(a, { type: 'report' });
+    send(a, { type: 'report', reason: 'spam' });
     expect(await nextMessage(a)).toMatchObject({ type: 'error', code: 'not_in_room' });
+    expect(onReport).not.toHaveBeenCalled();
     closeAll(a);
   });
 
   it('takes a report quietly and leaves the room standing', async () => {
-    const { a, b } = await pair('report-test');
+    const { a, b, joinedA, joinedB } = await pair('report-test');
 
-    send(a, { type: 'report' });
+    send(a, { type: 'report', reason: 'harassment', note: '  said things  ' });
     send(a, { type: 'offer', description: { type: 'offer', sdp: 'v=0' } });
 
     // No frame answers the report; the offer still relays, so the room is intact.
     expect(await nextMessage(b)).toMatchObject({ type: 'offer' });
     expect(signaling.roomCount()).toBe(1);
 
+    expect(onReport).toHaveBeenCalledTimes(1);
+    expect(onReport).toHaveBeenCalledWith({
+      roomId: 'report-test',
+      reporterId: joinedA.peerId,
+      reportedId: joinedB.peerId,
+      reason: 'harassment',
+      note: 'said things',
+    });
+
     closeAll(a, b);
+  });
+
+  it('stores no note when the note is blank', async () => {
+    const { a, b } = await pair('blank-note');
+
+    send(a, { type: 'report', reason: 'other', note: '   ' });
+    send(a, { type: 'offer', description: { type: 'offer', sdp: 'v=0' } });
+    expect(await nextMessage(b)).toMatchObject({ type: 'offer' });
+
+    expect(onReport).toHaveBeenCalledWith(expect.objectContaining({ reason: 'other', note: null }));
+
+    closeAll(a, b);
+  });
+
+  it('rejects a report with no reason', async () => {
+    const { a, b } = await pair('bare-report');
+
+    send(a, { type: 'report' });
+    expect(await nextMessage(a)).toMatchObject({ type: 'error', code: 'invalid_message' });
+    expect(onReport).not.toHaveBeenCalled();
+
+    closeAll(a, b);
+  });
+
+  it('counts open sockets', async () => {
+    expect(signaling.connectionCount()).toBe(0);
+
+    const a = await connect();
+    const b = await connect();
+    expect(signaling.connectionCount()).toBe(2);
+
+    closeAll(a, b);
+    await vi.waitFor(() => expect(signaling.connectionCount()).toBe(0));
   });
 });
 
@@ -351,10 +408,15 @@ describe('expiry', () => {
   let quick: Server;
   let quickSignaling: Signaling;
   let quickUrl: string;
+  const quickBreak = vi.fn();
 
   beforeAll(async () => {
     quick = createServer(createApp());
-    quickSignaling = attachSignaling(quick, { heartbeatMs: 60_000, chatDurationMs: 250 });
+    quickSignaling = attachSignaling(quick, {
+      heartbeatMs: 60_000,
+      chatDurationMs: 250,
+      onBreakCompleted: quickBreak,
+    });
     await new Promise<void>((resolve) => quick.listen(0, '127.0.0.1', resolve));
     quickUrl = `ws://127.0.0.1:${(quick.address() as AddressInfo).port}`;
   });
@@ -375,6 +437,8 @@ describe('expiry', () => {
     expect(expiredB).toEqual({ type: 'expired' });
     expect(await closes).toEqual([4004, 4004]);
     expect(quickSignaling.roomCount()).toBe(0);
+    expect(quickBreak).toHaveBeenCalledTimes(1);
+    expect(quickBreak).toHaveBeenCalledWith({ roomId: 'burn-out', via: 'expired', lit: 0 });
   });
 
   it('does not fire once a peer has left', async () => {
@@ -392,6 +456,8 @@ describe('expiry', () => {
     expect(expired).toBe(false);
     expect(a.readyState).toBe(WebSocket.OPEN);
     expect(quickSignaling.roomCount()).toBe(1);
+    // A break somebody walked out of is not a finished one.
+    expect(quickBreak).not.toHaveBeenCalledWith(expect.objectContaining({ roomId: 'put-out' }));
 
     closeAll(a);
     await vi.waitFor(() => expect(quickSignaling.roomCount()).toBe(0));

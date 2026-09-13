@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { resolve } from '$app/paths';
+  import StatsBox from '$lib/components/StatsBox.svelte';
   import {
     Band,
     Button,
@@ -11,20 +12,16 @@
     Sticker,
     Tag,
   } from '$lib/components/retro';
+  import { bumpVisits } from '$lib/storage';
 
-  /* The one number on this page. There is no presence endpoint, so nothing
-     here claims to know how many people are online -- this counts your own
-     visits, which is true, and is the joke old-web hit counters were always
-     half-making anyway. Read in onMount because this page is server-rendered. */
-  let visits = $state(0);
+  /* Your own visits, which is true and is the joke old-web hit counters were
+     always half-making anyway. Bumped once here and shown twice: in the
+     widgets band and in the fixed box, which also carries the two numbers the
+     server actually knows. `null` until mount because this page is
+     server-rendered, and the counter draws dashes for it. */
+  let visits = $state<number | null>(null);
   onMount(() => {
-    try {
-      const next = Number(localStorage.getItem('cb:visits') ?? '0') + 1;
-      localStorage.setItem('cb:visits', String(next));
-      visits = next;
-    } catch {
-      visits = 0;
-    }
+    visits = bumpVisits();
   });
 
   const noList = [
@@ -556,3 +553,5 @@
     </p>
   </div>
 </Band>
+
+<StatsBox {visits} />

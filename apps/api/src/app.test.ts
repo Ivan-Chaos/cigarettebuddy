@@ -26,4 +26,20 @@ describe('api', () => {
     expect(Array.isArray(res.body.data.iceServers)).toBe(true);
     expect(res.body.data.iceServers.length).toBeGreaterThan(0);
   });
+
+  it('serves live stats without letting them be cached', async () => {
+    const wired = createApp({ stats: () => ({ online: 3, breaks: 42 }) });
+    const res = await request(wired).get('/api/stats');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.body).toEqual({ data: { online: 3, breaks: 42 } });
+  });
+
+  it('says so when no stats source is wired', async () => {
+    const res = await request(app).get('/api/stats');
+
+    expect(res.status).toBe(503);
+    expect(res.body.error.code).toBe('stats_unavailable');
+  });
 });

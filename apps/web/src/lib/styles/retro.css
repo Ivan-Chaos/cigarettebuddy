@@ -216,12 +216,33 @@
   @media (width >= 60rem) {
     .rt-columns {
       grid-template-columns: minmax(0, 1fr) var(--spacing-rail);
+      /* The rail takes the stage's height, see .rt-rail. */
+      align-items: stretch;
     }
   }
 
   .rt-stage {
     display: grid;
     gap: 1rem;
+    /* Packed at the top: stretched next to a taller rail, the rows would
+       otherwise fan out to fill the row. */
+    align-content: start;
+  }
+
+  /* The chat rail. Stacked, it is a fixed-height box. Beside the stage, the
+     row's height comes from the stage alone and the panel inside is pulled
+     out of flow (`absolute inset-0`), so a long chat can never grow the row:
+     it scrolls instead. No `overflow: hidden` here, it would clip the panel's
+     offset shadow. */
+  .rt-rail {
+    position: relative;
+    height: 24rem;
+  }
+  @media (width >= 60rem) {
+    .rt-rail {
+      height: auto;
+      min-height: 24rem;
+    }
   }
 
   .rt-videogrid {
@@ -299,8 +320,10 @@
 
   /* ---- controls ---------------------------------------------------------- */
 
-  /* Native box, ember mark, no SVG and no library. */
-  .rt-check {
+  /* Native box, ember mark, no SVG and no library. The radio is the same box
+     with a smaller mark: square, because nothing here is round. */
+  .rt-check,
+  .rt-radio {
     appearance: none;
     width: 1rem;
     height: 1rem;
@@ -316,9 +339,42 @@
     height: 0.55rem;
     background-color: var(--color-ember);
   }
-  .rt-check:disabled {
+  .rt-radio:checked::after {
+    content: '';
+    width: 0.45rem;
+    height: 0.45rem;
+    background-color: var(--color-ember);
+  }
+  .rt-check:disabled,
+  .rt-radio:disabled {
     background-color: var(--color-putty);
     opacity: 0.6;
+  }
+
+  /* ---- attention --------------------------------------------------------- */
+
+  /* A button that wants pressing: ember/ink on a hard step, same clock as the
+     status dot. Stops the moment it is hovered or focused, since by then the
+     point is made. Both fills carry paper text, so nothing goes unreadable
+     mid-blink. */
+  @media (prefers-reduced-motion: no-preference) {
+    .rt-blink {
+      animation: rt-blink 1.4s steps(1, end) infinite;
+    }
+    .rt-blink:hover,
+    .rt-blink:focus-visible {
+      animation: none;
+    }
+  }
+  @keyframes rt-blink {
+    0%,
+    50% {
+      background-color: var(--color-ember);
+    }
+    50.01%,
+    100% {
+      background-color: var(--color-ink);
+    }
   }
 
   /* ---- disclosure -------------------------------------------------------- */

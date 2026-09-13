@@ -17,6 +17,9 @@
         ember: 'rt-raise-sm bg-ember text-paper hover:bg-[#8f2f0a]',
         quiet: 'border-transparent bg-transparent text-ink hover:underline',
         danger: 'rt-raise-sm border-ember bg-panel text-ember hover:bg-[#f6e6df]',
+        /* Filled destructive. Hovers to ink rather than darker ember so it never
+           reads as `ember` with a different label. */
+        'danger-solid': 'rt-raise-sm border-ink bg-ember text-paper hover:bg-ink',
       },
       size: {
         sm: 'h-7 px-2 text-[0.8125rem]',
