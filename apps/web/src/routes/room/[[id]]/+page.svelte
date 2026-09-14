@@ -20,6 +20,7 @@
     Panel,
     StatusStrip,
     Tooltip,
+    TopicCard,
     VideoPanel,
   } from '$lib/components/retro';
   import { RoomSession, type RoomStatus } from '$lib/rtc/room.svelte';
@@ -195,6 +196,18 @@
             />
             <AshtrayMeter count={room.lit} label="smoked together" class="min-w-40" />
           </div>
+        {/if}
+
+        <!-- Between the faces and the alarms: where you look while stalling for
+             something to say, and far enough from the button row that the
+             Notices below stay closest to the controls they talk about. -->
+        {#if room.status !== 'expired'}
+          <TopicCard
+            topic={room.topic}
+            ready={room.canChangeTopic}
+            onNext={() => room.nextTopic()}
+            class="mx-auto w-full max-w-xl"
+          />
         {/if}
 
         {#if room.status === 'expired'}

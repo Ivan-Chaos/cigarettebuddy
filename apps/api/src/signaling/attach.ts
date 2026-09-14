@@ -8,6 +8,7 @@ import {
   type IceServer,
   type ServerMessage,
   type SignalingErrorCode,
+  type Topic,
 } from '@cigbuddy/shared';
 import { logger } from '../logger.js';
 import type { ReportRecord } from '../reports/store.js';
@@ -35,6 +36,10 @@ export interface SignalingOptions {
   heartbeatMs?: number;
   /** Length of one cigarette. Defaults to `CHAT_DURATION_MS`; tests shorten it. */
   chatDurationMs?: number;
+  /** Supplies icebreakers to rooms. Absent means the feature is simply off. */
+  pickTopic?: (exclude: readonly string[]) => Topic | null;
+  /** Minimum gap between topic changes. Defaults to `TOPIC_COOLDOWN_MS`; tests shorten it. */
+  topicCooldownMs?: number;
   /** Called once per report frame, after it has been logged. Storing it is the caller's job. */
   onReport?: (report: ReportRecord) => void;
   /**
@@ -84,7 +89,11 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
   const log = logger.child({ module: 'signaling' });
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
-  const rooms = new RoomManager<WebSocket>({ durationMs: options.chatDurationMs });
+  const rooms = new RoomManager<WebSocket>({
+    durationMs: options.chatDurationMs,
+    pickTopic: options.pickTopic,
+    topicCooldownMs: options.topicCooldownMs,
+  });
   const states = new WeakMap<WebSocket, ConnState>();
   /** Open sockets per client address, for the connection cap. */
   const perIp = new Map<string, number>();
@@ -196,6 +205,8 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
         return dropPeer(ws);
       case 'light-another':
         return handleVote(ws);
+      case 'next-topic':
+        return handleTopic(ws, msg);
       case 'report':
         return handleReport(ws, msg);
       case 'offer':
@@ -238,6 +249,46 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
     // After `joined`, so the newcomer knows its own peer id when it reads
     // `wantsAnother`. Frames on one socket arrive in order.
     if (other) syncTimer(roomId);
+
+    // Broadcast rather than sent to the newcomer alone: a join that filled the
+    // room re-rolled the subject, so the peer who was already here has to hear
+    // about it too. A lone joiner is simply the one-peer case of the same call.
+    syncTopic(roomId);
+  }
+
+  /**
+   * Tells everyone in the room what the subject is. The twin of `syncTimer`,
+   * minus the clock: nothing is scheduled, so `close()` needs no new
+   * bookkeeping. A room with no topic sends nothing at all, which is what an
+   * API wired without a topic source does for every room.
+   */
+  function syncTopic(roomId: string, from: string | null = null) {
+    const topic = rooms.topicOf(roomId);
+    if (!topic) return;
+
+    for (const peer of rooms.peersOf(roomId)) {
+      send(peer.conn, { type: 'topic', topic, from });
+    }
+  }
+
+  /** A peer changing the subject for both of them. */
+  function handleTopic(ws: WebSocket, msg: Extract<ClientMessage, { type: 'next-topic' }>) {
+    const peer = rooms.peerOf(ws);
+    const result = rooms.shuffleTopic(ws, msg.afterId);
+
+    if (!result.ok) {
+      if (result.code === 'not_in_room') {
+        sendError(ws, 'not_in_room', 'Join a room before changing the subject');
+        return;
+      }
+      // Cooling down, already changed, or nothing to pick. The client disables
+      // its own button for the same cooldown, so silence is the whole answer:
+      // an error frame here would put a red box on screen over an icebreaker.
+      log.debug({ peerId: peer?.id, code: result.code }, 'Ignored a topic change');
+      return;
+    }
+
+    if (peer) syncTopic(peer.roomId, peer.id);
   }
 
   /**
@@ -297,8 +348,11 @@ export function attachSignaling(server: Server, options: SignalingOptions = {}):
       log.info({ roomId, lit: result.state.lit }, 'Relit');
       // Both wanted more: the cigarette just finished counts as a good one.
       onBreakCompleted?.({ roomId, via: 'relit', lit: result.state.lit });
+      // A new cigarette, a new subject.
+      rooms.rollTopic(roomId);
     }
     syncTimer(roomId);
+    if (result.relit) syncTopic(roomId);
   }
 
   /**

@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
-import { CHAT_DURATION_MS, roomIdSchema, type ServerMessage } from '@cigbuddy/shared';
+import { CHAT_DURATION_MS, roomIdSchema, type ServerMessage, type Topic } from '@cigbuddy/shared';
 import { createApp } from '../app.js';
 import { attachSignaling, type Signaling } from './attach.js';
 
@@ -509,5 +509,232 @@ describe('per-address connection cap', () => {
     const c = await connectAs('203.0.113.7');
 
     closeAll(b, c, other);
+  });
+});
+
+/**
+ * Its own server, because the one above is wired without a topic source and
+ * every test in it asserts on a frame sequence that topics would sit inside.
+ */
+describe('signaling topics', () => {
+  const CATALOG: Topic[] = [
+    { id: 't-001', kind: 'opener', text: 'one' },
+    { id: 't-002', kind: 'take', text: 'two' },
+    { id: 't-003', kind: 'divisive', text: 'three' },
+  ];
+
+  let cursor = 0;
+  /** Hands out the catalogue in order so assertions can be exact. */
+  const pickTopic = (exclude: readonly string[]) => {
+    for (let i = 0; i < CATALOG.length; i++) {
+      const topic = CATALOG[(cursor + i) % CATALOG.length];
+      if (topic && !exclude.includes(topic.id)) {
+        cursor = (cursor + i + 1) % CATALOG.length;
+        return topic;
+      }
+    }
+    return null;
+  };
+
+  let topicServer: Server;
+  let topicSignaling: Signaling;
+  let topicUrl: string;
+
+  // A second server whose cooldown never elapses during a test, for asserting
+  // that a refused change produces no frame at all.
+  let frozenServer: Server;
+  let frozenSignaling: Signaling;
+  let frozenUrl: string;
+
+  beforeAll(async () => {
+    topicServer = createServer(createApp());
+    topicSignaling = attachSignaling(topicServer, {
+      heartbeatMs: 60_000,
+      pickTopic,
+      // Nought, so a change lands immediately: the cooldown itself is covered
+      // by the unit tests, and by the frozen server below.
+      topicCooldownMs: 0,
+      // Every socket here is 127.0.0.1, and the default cap is 8. These tests
+      // open nine across the block, and a close handshake that lands a tick
+      // late would surface as an opaque 429 in whichever test ran last.
+      maxConnectionsPerIp: Infinity,
+    });
+    await new Promise<void>((resolve) => topicServer.listen(0, '127.0.0.1', resolve));
+    topicUrl = `ws://127.0.0.1:${(topicServer.address() as AddressInfo).port}`;
+
+    frozenServer = createServer(createApp());
+    frozenSignaling = attachSignaling(frozenServer, {
+      heartbeatMs: 60_000,
+      pickTopic,
+      topicCooldownMs: 60_000,
+      maxConnectionsPerIp: Infinity,
+    });
+    await new Promise<void>((resolve) => frozenServer.listen(0, '127.0.0.1', resolve));
+    frozenUrl = `ws://127.0.0.1:${(frozenServer.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await topicSignaling.close();
+    await frozenSignaling.close();
+    await new Promise<void>((resolve) => topicServer.close(() => resolve()));
+    await new Promise<void>((resolve) => frozenServer.close(() => resolve()));
+  });
+
+  // Same reason as the block above: a socket closed client-side at the end of
+  // one test can still be seated when the next one starts.
+  beforeEach(async () => {
+    await vi.waitFor(() => expect(topicSignaling.roomCount()).toBe(0));
+    await vi.waitFor(() => expect(frozenSignaling.roomCount()).toBe(0));
+    cursor = 0;
+  });
+
+  /** Resolves true when no frame of that type turns up in `ms`. */
+  function quiet(ws: WebSocket, type: ServerMessage['type'], ms = 150): Promise<boolean> {
+    return new Promise((resolve) => {
+      const onMessage = (raw: Buffer | ArrayBuffer | Buffer[]) => {
+        if ((JSON.parse(raw.toString()) as ServerMessage).type !== type) return;
+        clearTimeout(timer);
+        ws.off('message', onMessage);
+        resolve(false);
+      };
+      const timer = setTimeout(() => {
+        ws.off('message', onMessage);
+        resolve(true);
+      }, ms);
+      ws.on('message', onMessage);
+    });
+  }
+
+  it('gives somebody waiting alone something to read', async () => {
+    const a = await connect('/api/ws', topicUrl);
+    const topic = waitFor(a, 'topic');
+    send(a, { type: 'join', roomId: 'topic-alone' });
+
+    expect(await topic).toEqual({ type: 'topic', topic: CATALOG[0], from: null });
+    closeAll(a);
+  });
+
+  it('puts the same subject in front of both peers when the room fills', async () => {
+    const a = await connect('/api/ws', topicUrl);
+    const firstA = waitFor(a, 'topic');
+    send(a, { type: 'join', roomId: 'topic-pair' });
+    await firstA;
+
+    const b = await connect('/api/ws', topicUrl);
+    const refreshedA = waitFor(a, 'topic');
+    const topicB = waitFor(b, 'topic');
+    send(b, { type: 'join', roomId: 'topic-pair' });
+
+    const onA = await refreshedA;
+    const onB = await topicB;
+    // A new pairing gets a fresh subject, and both read the identical one.
+    expect(onA.topic).toEqual(onB.topic);
+    expect(onA.topic).not.toEqual(CATALOG[0]);
+    expect(onA.from).toBeNull();
+
+    closeAll(a, b);
+  });
+
+  it('changes the subject for both when one of them asks', async () => {
+    const a = await connect('/api/ws', topicUrl);
+    const firstA = waitFor(a, 'topic');
+    send(a, { type: 'join', roomId: 'topic-change' });
+    await firstA;
+
+    const b = await connect('/api/ws', topicUrl);
+    const settledA = waitFor(a, 'topic');
+    const joinedB = waitFor(b, 'joined');
+    const settledB = waitFor(b, 'topic');
+    send(b, { type: 'join', roomId: 'topic-change' });
+    const current = (await settledA).topic;
+    await settledB;
+    const peerB = (await joinedB).peerId;
+
+    const changedA = waitFor(a, 'topic');
+    const changedB = waitFor(b, 'topic');
+    send(b, { type: 'next-topic', afterId: current.id });
+
+    const onA = await changedA;
+    const onB = await changedB;
+    expect(onA.topic).toEqual(onB.topic);
+    expect(onA.topic).not.toEqual(current);
+    // Named, so the other side can say who moved it.
+    expect(onA.from).toBe(peerB);
+    expect(onB.from).toBe(peerB);
+
+    closeAll(a, b);
+  });
+
+  it('ignores a request aimed at a subject that has already gone', async () => {
+    const a = await connect('/api/ws', topicUrl);
+    const first = waitFor(a, 'topic');
+    send(a, { type: 'join', roomId: 'topic-stale' });
+    await first;
+
+    // Both peers clicked at once: the loser's frame names a topic nobody is
+    // still reading, and it must not roll a second time.
+    const changed = waitFor(a, 'topic');
+    send(a, { type: 'next-topic', afterId: CATALOG[0]?.id });
+    await changed;
+
+    send(a, { type: 'next-topic', afterId: CATALOG[0]?.id });
+    expect(await quiet(a, 'topic')).toBe(true);
+
+    closeAll(a);
+  });
+
+  it('says nothing at all to a change inside the cooldown', async () => {
+    const a = await connect('/api/ws', frozenUrl);
+    const first = waitFor(a, 'topic');
+    send(a, { type: 'join', roomId: 'topic-cooldown' });
+    const current = (await first).topic;
+
+    // Both watchers armed before the send, and awaited together. Checking them
+    // one after the other would let the first window swallow the very frame the
+    // second is looking for, which would make this assertion unfailable.
+    const noTopic = quiet(a, 'topic');
+    const noError = quiet(a, 'error');
+    send(a, { type: 'next-topic', afterId: current.id });
+
+    // Silence, not an error: a red box over an icebreaker would be absurd.
+    expect(await noTopic).toBe(true);
+    expect(await noError).toBe(true);
+
+    closeAll(a);
+  });
+
+  it('refuses a change before joining', async () => {
+    const a = await connect('/api/ws', topicUrl);
+    send(a, { type: 'next-topic' });
+
+    expect(await nextMessage(a)).toMatchObject({ type: 'error', code: 'not_in_room' });
+    closeAll(a);
+  });
+
+  it('rolls a new subject when the pair light another one', async () => {
+    const a = await connect('/api/ws', topicUrl);
+    const firstA = waitFor(a, 'topic');
+    send(a, { type: 'join', roomId: 'topic-relight' });
+    await firstA;
+
+    const b = await connect('/api/ws', topicUrl);
+    const settledA = waitFor(a, 'topic');
+    const settledB = waitFor(b, 'topic');
+    send(b, { type: 'join', roomId: 'topic-relight' });
+    const current = (await settledA).topic;
+    await settledB;
+
+    send(a, { type: 'light-another' });
+    const relitA = waitFor(a, 'topic');
+    const relitB = waitFor(b, 'topic');
+    send(b, { type: 'light-another' });
+
+    const onA = await relitA;
+    expect(onA.topic).not.toEqual(current);
+    // Nobody clicked the topic button, so nobody is named.
+    expect(onA.from).toBeNull();
+    expect((await relitB).topic).toEqual(onA.topic);
+
+    closeAll(a, b);
   });
 });

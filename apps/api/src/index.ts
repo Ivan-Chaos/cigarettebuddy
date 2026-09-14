@@ -8,12 +8,20 @@ import { createDbReportStore } from './reports/store.js';
 import { attachSignaling, type Signaling } from './signaling/attach.js';
 import { createCounters } from './stats/counters.js';
 import { dbPersistence } from './stats/db-counters.js';
+import { TOPIC_CATALOG } from './topics/catalog.js';
+import { dbTopicSource } from './topics/db-topics.js';
+import { createTopics } from './topics/topics.js';
 
 const counters = createCounters(dbPersistence(db));
 // Not awaited: a slow database must not hold the port. The first increment
 // heals the cache if this lost the race.
 void counters.load();
 const reportStore = createDbReportStore(db);
+
+const topics = createTopics(dbTopicSource(db), TOPIC_CATALOG);
+// Also not awaited, and safer than the counters: the cache already holds the
+// built-in catalogue, so rooms opened before this lands are fully served.
+void topics.sync();
 
 // The Express app is built before the socket server exists, so the stats
 // getter reads `signaling` lazily rather than at construction.
@@ -23,6 +31,7 @@ const app = createApp({
     online: signaling?.connectionCount() ?? 0,
     breaks: counters.get('breaks'),
   }),
+  topic: () => topics.random(),
 });
 const server = app.listen(env.API_PORT, env.API_HOST, () => {
   logger.info(`API listening on http://${env.API_HOST}:${env.API_PORT} (${env.NODE_ENV})`);
@@ -37,6 +46,7 @@ signaling = attachSignaling(server, {
   allowedOrigins: env.isProduction ? env.corsOrigins : undefined,
   clientIp: (req) => clientIpFrom(req, env.trustProxy, env.CLIENT_IP_HEADER),
   maxConnectionsPerIp: env.isProduction ? undefined : Infinity,
+  pickTopic: (exclude) => topics.random(exclude),
   onReport: (report) =>
     void reportStore
       .save(report)

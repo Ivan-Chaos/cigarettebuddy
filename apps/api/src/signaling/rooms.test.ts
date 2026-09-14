@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { roomIdSchema } from '@cigbuddy/shared';
+import { roomIdSchema, type Topic } from '@cigbuddy/shared';
 import { RoomManager } from './rooms.js';
 
 type Conn = { name: string };
@@ -330,5 +330,204 @@ describe('RoomManager clock', () => {
     expect(rooms.peerOf(b)).toBeUndefined();
     expect(rooms.leave(a)).toBeNull();
     expect(rooms.expire('room-1')).toEqual([]);
+  });
+});
+
+describe('RoomManager topics', () => {
+  const COOLDOWN = 3_000;
+
+  const CATALOG: Topic[] = [
+    { id: 't-001', kind: 'opener', text: 'one' },
+    { id: 't-002', kind: 'take', text: 'two' },
+    { id: 't-003', kind: 'divisive', text: 'three' },
+  ];
+
+  /** Hands out the catalogue in order, skipping whatever it is told to. */
+  function stocked(catalog: Topic[] = CATALOG) {
+    const clock = { t: 10_000 };
+    let next = 0;
+    const rooms = new RoomManager<Conn>({
+      now: () => clock.t,
+      topicCooldownMs: COOLDOWN,
+      pickTopic: (exclude) => {
+        for (let i = 0; i < catalog.length; i++) {
+          const topic = catalog[(next + i) % catalog.length];
+          if (topic && !exclude.includes(topic.id)) {
+            next = (next + i + 1) % catalog.length;
+            return topic;
+          }
+        }
+        return null;
+      },
+    });
+    return { rooms, clock };
+  }
+
+  it('gives a brand-new room a subject, before anyone else turns up', () => {
+    const { rooms } = stocked();
+    rooms.join('room-1', { name: 'a' }, 'peer-a');
+
+    expect(rooms.topicOf('room-1')).toEqual(CATALOG[0]);
+  });
+
+  it('has no subject for a room that does not exist', () => {
+    const { rooms } = stocked();
+
+    expect(rooms.topicOf('nowhere')).toBeNull();
+  });
+
+  it('rolls a fresh subject when the room fills', () => {
+    const { rooms } = stocked();
+    rooms.join('room-1', { name: 'a' }, 'peer-a');
+    const first = rooms.topicOf('room-1');
+
+    rooms.join('room-1', { name: 'b' }, 'peer-b');
+
+    expect(rooms.topicOf('room-1')).not.toEqual(first);
+  });
+
+  it('keeps the subject when a peer leaves, unlike the clock', () => {
+    const { rooms } = stocked();
+    const a = { name: 'a' };
+    const b = { name: 'b' };
+    rooms.join('room-1', a, 'peer-a');
+    rooms.join('room-1', b, 'peer-b');
+    const subject = rooms.topicOf('room-1');
+
+    rooms.leave(b);
+
+    expect(rooms.timerState('room-1')).toBeNull();
+    expect(rooms.topicOf('room-1')).toEqual(subject);
+  });
+
+  it('forgets the subject along with the room', () => {
+    const { rooms } = stocked();
+    rooms.join('room-1', { name: 'a' }, 'peer-a');
+    rooms.join('room-1', { name: 'b' }, 'peer-b');
+
+    rooms.expire('room-1');
+
+    expect(rooms.topicOf('room-1')).toBeNull();
+  });
+
+  it('changes the subject on request, and never to the one just shown', () => {
+    const { rooms, clock } = stocked();
+    const a = { name: 'a' };
+    rooms.join('room-1', a, 'peer-a');
+    const before = rooms.topicOf('room-1');
+    clock.t += COOLDOWN;
+
+    const result = rooms.shuffleTopic(a);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.topic).not.toEqual(before);
+    expect(rooms.topicOf('room-1')).toEqual(result.ok ? result.topic : null);
+  });
+
+  it('refuses a second change inside the cooldown', () => {
+    const { rooms, clock } = stocked();
+    const a = { name: 'a' };
+    rooms.join('room-1', a, 'peer-a');
+    clock.t += COOLDOWN;
+    rooms.shuffleTopic(a);
+
+    clock.t += COOLDOWN - 1;
+    expect(rooms.shuffleTopic(a)).toEqual({ ok: false, code: 'cooling_down' });
+
+    clock.t += 1;
+    expect(rooms.shuffleTopic(a).ok).toBe(true);
+  });
+
+  it('ignores a request aimed at a subject that is already gone', () => {
+    const { rooms, clock } = stocked();
+    const a = { name: 'a' };
+    rooms.join('room-1', a, 'peer-a');
+    clock.t += COOLDOWN;
+
+    // Both peers clicked at once: the second click was a reaction to a topic
+    // neither of them is still reading.
+    expect(rooms.shuffleTopic(a, 't-001').ok).toBe(true);
+    clock.t += COOLDOWN;
+    expect(rooms.shuffleTopic(a, 't-001')).toEqual({ ok: false, code: 'stale' });
+  });
+
+  it('does not claim a change when the same subject comes back', () => {
+    // `pickTopic` is allowed to give up and return anything rather than
+    // nothing, which with only a handful of active topics means the one
+    // already on screen. Reporting that as a change would tell the other peer
+    // "they changed the subject" over identical text.
+    const only = CATALOG[0] as Topic;
+    const clock = { t: 0 };
+    const rooms = new RoomManager<Conn>({
+      now: () => clock.t,
+      topicCooldownMs: 0,
+      pickTopic: () => only,
+    });
+    const a = { name: 'a' };
+    rooms.join('room-1', a, 'peer-a');
+
+    expect(rooms.topicOf('room-1')).toEqual(only);
+    expect(rooms.shuffleTopic(a)).toEqual({ ok: false, code: 'no_topics' });
+    expect(rooms.topicOf('room-1')).toEqual(only);
+  });
+
+  it('turns away a connection that is not in a room', () => {
+    const { rooms } = stocked();
+
+    expect(rooms.shuffleTopic({ name: 'nobody' })).toEqual({ ok: false, code: 'not_in_room' });
+  });
+
+  it('says so when there is nothing to pick', () => {
+    const { rooms } = stocked([]);
+    const a = { name: 'a' };
+    rooms.join('room-1', a, 'peer-a');
+
+    expect(rooms.topicOf('room-1')).toBeNull();
+    expect(rooms.shuffleTopic(a)).toEqual({ ok: false, code: 'no_topics' });
+  });
+
+  it('remembers what it has shown, so a re-roll does not repeat', () => {
+    const seen: string[][] = [];
+    const clock = { t: 0 };
+    const rooms = new RoomManager<Conn>({
+      now: () => clock.t,
+      topicCooldownMs: 0,
+      pickTopic: (exclude) => {
+        seen.push([...exclude]);
+        return CATALOG[seen.length % CATALOG.length] ?? null;
+      },
+    });
+    const a = { name: 'a' };
+    rooms.join('room-1', a, 'peer-a');
+    rooms.shuffleTopic(a);
+    rooms.shuffleTopic(a);
+
+    // The first pick has nothing to avoid; each later one is told about every
+    // topic the room has had, newest first.
+    expect(seen[0]).toEqual([]);
+    expect(seen[1]).toHaveLength(1);
+    expect(seen[2]).toHaveLength(2);
+  });
+
+  it('rolls without a cooldown when the server decides', () => {
+    const { rooms } = stocked();
+    rooms.join('room-1', { name: 'a' }, 'peer-a');
+    const before = rooms.topicOf('room-1');
+
+    // No clock movement: a relight is not somebody clicking.
+    const rolled = rooms.rollTopic('room-1');
+
+    expect(rolled).not.toBeNull();
+    expect(rolled).not.toEqual(before);
+    expect(rooms.rollTopic('nowhere')).toBeNull();
+  });
+
+  it('leaves rooms without a topic source exactly as they were', () => {
+    const rooms = new RoomManager<Conn>();
+    const a = { name: 'a' };
+    rooms.join('room-1', a, 'peer-a');
+
+    expect(rooms.topicOf('room-1')).toBeNull();
+    expect(rooms.shuffleTopic(a)).toEqual({ ok: false, code: 'no_topics' });
   });
 });

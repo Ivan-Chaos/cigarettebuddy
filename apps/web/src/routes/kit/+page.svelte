@@ -21,6 +21,7 @@
     TextArea,
     TextField,
     Tooltip,
+    TopicCard,
     VideoPanel,
   } from '$lib/components/retro';
 
@@ -260,7 +261,7 @@
       <span class="rt-mono text-xs">drawer 5 of 6</span>
     {/snippet}
     <p class="rt-mono mb-3 text-xs text-ink-soft">
-      VideoPanel, plus ChatPanel and DeviceControl, which compose the rest.
+      VideoPanel and TopicCard, plus ChatPanel and DeviceControl, which compose the rest.
     </p>
     <div class="grid gap-3 sm:grid-cols-2">
       <figure class="rt-specimen">
@@ -279,6 +280,13 @@
         <figcaption>mirrored, ratio="4/3"</figcaption>
       </figure>
     </div>
+    <figure class="rt-specimen mt-3">
+      <TopicCard
+        topic={{ id: 't-001', kind: 'opener', text: "what's the worst job you were good at" }}
+        class="w-full"
+      />
+      <figcaption>topic, ready, onNext</figcaption>
+    </figure>
   </Panel>
 
   <Panel title="Old web" titleAs="h3" strip="berry">

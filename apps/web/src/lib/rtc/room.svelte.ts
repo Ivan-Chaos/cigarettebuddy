@@ -1,11 +1,13 @@
 import {
   SIGNALING_CLOSE_CODES,
+  TOPIC_COOLDOWN_MS,
   chatMessageSchema,
   type ChatMessage,
   type ClientMessage,
   type IceServer,
   type ReportReason,
   type ServerMessage,
+  type Topic,
 } from '@cigbuddy/shared';
 import { readLastRoom, writeLastRoom } from '$lib/storage';
 import { nowIso } from './clock';
@@ -50,6 +52,16 @@ export class RoomSession {
   iWantAnother = $derived(this.wantsAnother.includes(this.peerId));
   theyWantAnother = $derived(this.wantsAnother.some((id) => id !== this.peerId));
 
+  /** What the room says to talk about. Server-owned; both peers see this one. */
+  topic = $state<Topic | null>(null);
+  /** The room's cooldown, mirrored here so the button never lies about being live. */
+  topicCoolingDown = $state(false);
+  /** The socket is gone in `error`, and there is no room yet in the states before
+   *  `waiting`, so the card's button is only live in these two. */
+  canChangeTopic = $derived(
+    !this.topicCoolingDown && (this.status === 'connected' || this.status === 'waiting'),
+  );
+
   localStream = $state.raw<MediaStream | null>(null);
   remoteStream = $state.raw<MediaStream | null>(null);
   connectionState = $state<RTCPeerConnectionState | 'none'>('none');
@@ -74,6 +86,7 @@ export class RoomSession {
   private destroyed = false;
   private readonly onDeviceChange = () => void this.refreshDevices();
   private watchingDevices = false;
+  private topicCooldown: ReturnType<typeof setTimeout> | null = null;
 
   /** Joins a specific room by id. */
   async join(roomId: string): Promise<void> {
@@ -107,6 +120,19 @@ export class RoomSession {
   lightAnother(): void {
     if (this.status !== 'connected' || this.iWantAnother) return;
     this.signaling?.send({ type: 'light-another' });
+  }
+
+  /**
+   * Asks for a different subject. The room decides, and both sides get the
+   * answer. Guarded like `lightAnother()`: `send` drops silently on a closed
+   * socket, so without the status check a click during a dropped connection
+   * would arm the cooldown for a request the server never saw.
+   */
+  nextTopic(): void {
+    if (this.topicCoolingDown) return;
+    if (this.status !== 'connected' && this.status !== 'waiting') return;
+    this.signaling?.send({ type: 'next-topic', afterId: this.topic?.id });
+    this.armTopicCooldown();
   }
 
   /** Flags the other person, then leaves. Same socket, so the report goes first. */
@@ -196,6 +222,11 @@ export class RoomSession {
     for (const track of this.localStream?.getTracks() ?? []) track.stop();
     this.localStream = null;
     this.status = 'idle';
+    if (this.topicCooldown) {
+      clearTimeout(this.topicCooldown);
+      this.topicCooldown = null;
+      this.topicCoolingDown = false;
+    }
     if (this.watchingDevices) {
       navigator.mediaDevices.removeEventListener('devicechange', this.onDeviceChange);
       this.watchingDevices = false;
@@ -336,6 +367,17 @@ export class RoomSession {
         return;
       }
 
+      case 'topic':
+        this.topic = message.topic;
+        // Armed on receive as well as on send: the cooldown belongs to the
+        // room, so when they change the subject your button is genuinely dead
+        // for a few seconds and should look it.
+        this.armTopicCooldown();
+        // Only a peer-initiated change earns a line. The server's own rolls (a
+        // new room, a relight) already have their explanation on screen.
+        if (message.from && message.from !== this.peerId) this.system('They changed the subject.');
+        return;
+
       case 'expired':
         this.system("That's the break.");
         this.leaveRoom();
@@ -415,6 +457,10 @@ export class RoomSession {
   private leaveRoom(): void {
     if (this.roomId) writeLastRoom(this.roomId);
     this.clearBurn();
+    // Here rather than in `clearBurn()`, which also runs on `peer-left`: the
+    // server keeps the subject when your buddy walks off, so blanking the card
+    // while you wait alone would be wrong. Every exit routes through here.
+    this.topic = null;
     this.teardownPeer();
     const signaling = this.signaling;
     this.signaling = null;
@@ -428,6 +474,16 @@ export class RoomSession {
     this.deadline = null;
     this.lit = 0;
     this.wantsAnother = [];
+  }
+
+  /** Restarted by every topic frame, so their change cools your button too. */
+  private armTopicCooldown(): void {
+    if (this.topicCooldown) clearTimeout(this.topicCooldown);
+    this.topicCoolingDown = true;
+    this.topicCooldown = setTimeout(() => {
+      this.topicCoolingDown = false;
+      this.topicCooldown = null;
+    }, TOPIC_COOLDOWN_MS);
   }
 
   private attachChat(channel: RTCDataChannel): void {

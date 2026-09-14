@@ -54,6 +54,7 @@ export { default as AshtrayMeter } from './AshtrayMeter.svelte';
 
 // Room
 export { default as VideoPanel } from './VideoPanel.svelte';
+export { default as TopicCard } from './TopicCard.svelte';
 
 // Pack motifs
 export { default as Chevron } from './Chevron.svelte';
