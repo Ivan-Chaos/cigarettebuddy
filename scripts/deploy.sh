@@ -60,13 +60,14 @@ compose ps
 
 # Every deploy leaves the previous SHA-tagged images behind, and they stay
 # tagged, so `docker image prune` would never touch them. Drop ours by name
-# instead of pruning globally — this host runs other stacks too.
+# instead of pruning globally — this host runs other stacks too. `grep` exits
+# 1 when there is nothing older to drop, which is the normal case on a first
+# deploy and must not fail the script.
 for repo in "${IMAGE_PREFIX}-api" "${IMAGE_PREFIX}-web"; do
-  docker image ls "$repo" --format '{{.Tag}}' \
-    | grep -vx -e "$IMAGE_TAG" -e latest \
-    | while read -r old; do
-        docker image rm "${repo}:${old}" >/dev/null 2>&1 || true
-      done
+  old_tags="$(docker image ls "$repo" --format '{{.Tag}}' | grep -vx -e "$IMAGE_TAG" -e latest || true)"
+  for old in $old_tags; do
+    docker image rm "${repo}:${old}" >/dev/null 2>&1 || true
+  done
 done
 
 echo "==> Deployed ${IMAGE_TAG}"
