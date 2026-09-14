@@ -206,17 +206,20 @@ whose `Origin` is listed in `CORS_ORIGIN` when running in production).
 
 ## API
 
-| Method | Path                | Notes                                                 |
-| ------ | ------------------- | ----------------------------------------------------- |
-| GET    | `/api/health/live`  | Liveness — process only                               |
-| GET    | `/api/health/ready` | Readiness — also pings Postgres, 503 if down          |
-| GET    | `/api/ice`          | ICE servers browsers get; dev only                    |
-| GET    | `/api/stats`        | `{ online, breaks }` for the front page; never cached |
-| WS     | `/api/ws`           | Room signaling — see [Video rooms](#video-rooms)      |
+| Method | Path                 | Notes                                                 |
+| ------ | -------------------- | ----------------------------------------------------- |
+| GET    | `/api/health/live`   | Liveness — process only                               |
+| GET    | `/api/health/ready`  | Readiness — also pings Postgres, 503 if down          |
+| GET    | `/api/ice`           | ICE servers browsers get; dev only                    |
+| GET    | `/api/stats`         | `{ online, breaks }` for the front page; never cached |
+| GET    | `/api/topics/random` | One icebreaker; never cached                          |
+| WS     | `/api/ws`            | Room signaling — see [Video rooms](#video-rooms)      |
 
-That is the whole surface. Postgres holds two tables, `reports` and
-`counters`, both written from the signaling side; nothing is read back over
-HTTP except the two numbers in `/api/stats`.
+That is the whole surface. Postgres holds three tables: `reports` and
+`counters` are written from the signaling side and never read back over HTTP
+except as the two numbers in `/api/stats`; `topics` is the other way round —
+seeded from the catalogue in `apps/api/src/topics/catalog.ts` at boot, then
+only read.
 
 Errors always come back as `{ error: { message, code, details? } }` — see
 `apiErrorSchema` in `packages/shared`.
@@ -225,7 +228,9 @@ Errors always come back as `{ error: { message, code, details? } }` — see
 
 The web app is an anonymous one-to-one video chat built on native WebRTC —
 `RTCPeerConnection`, `getUserMedia` and an `RTCDataChannel` for text chat. No
-accounts, no database: rooms live in the API's memory and vanish when empty.
+accounts, and no database in the path of a call: rooms live in the API's memory
+and vanish when empty. The only thing a room reads from Postgres is its
+conversation topic, and even that is cached in the process.
 
 - `/` is the lobby: a single **Join room** button. It navigates to `/room`,
   which asks the server for a random match: any room that currently has one
@@ -259,6 +264,25 @@ accounts, no database: rooms live in the API's memory and vanish when empty.
   else") and sends `report { reason, note? }` before leaving. The API logs it
   and writes a row to `reports`; no frame goes back and the room stays up for
   the other person.
+- **Something to talk about.** Every room carries a conversation topic, and
+  both people see the same one: the server owns it and pushes `topic` the way
+  it pushes the clock. A room gets one the moment it opens, so somebody waiting
+  alone already has something to read, and a fresh one when it fills or when the
+  pair light another. **Change the subject** sends `next-topic` and re-rolls it
+  for both; the room remembers the last dozen so a re-roll does not repeat
+  itself. There is a `TOPIC_COOLDOWN_MS` gap per _room_, not per peer, so one
+  person cannot flip the other's screen — a refused change gets silence rather
+  than an error frame, and the button is disabled on both sides meanwhile.
+- **Editing topics.** The catalogue in `apps/api/src/topics/catalog.ts` is
+  canonical and seeded into `topics` at every boot, so adding or rewording one
+  is a code change reviewed in a diff. The database owns two things the
+  catalogue cannot: `active = false` retires a topic without a deploy (`update
+topics set active = false where kind = 'divisive'` is the panic button if the
+  report queue lights up), and a row with `source = 'manual'` is never touched
+  by the sync. The sync retires, never revives: turning a topic back on is
+  deliberately a human act. If the table is empty or Postgres is down, the API
+  serves the compiled-in catalogue instead, so the feature has no cold start
+  and no outage.
 - **Smoke breaks** are counted in the `counters` table: every finished
   cigarette is one — the ten minutes ran out with both people still there, or
   both voted to light another. The front page reads it from `/api/stats`
@@ -279,7 +303,8 @@ newcomer initiates the offer and creates the chat channel. Negotiation follows
 the spec's "perfect negotiation" pattern, so glare resolves itself and a
 survivor becomes polite again when a new peer arrives. The server relays
 `offer`, `answer` and `ice-candidate` messages verbatim, and on top of that
-speaks `timer` / `expired` (its clock) and accepts `light-another` / `report`;
+speaks `timer` / `expired` (its clock) and `topic` (the room's subject), and
+accepts `light-another` / `next-topic` / `report`;
 the message shapes are the Zod schemas in `packages/shared/src/signaling.ts`.
 
 **TURN.** Peers behind symmetric NAT need a relay. Point the API at yours with
@@ -430,7 +455,7 @@ error.
 
 ### Components
 
-`src/lib/components/retro/` is the hand-written kit — 23 components, flat, one
+`src/lib/components/retro/` is the hand-written kit — 27 components, flat, one
 barrel. Import from `$lib/components/retro`. Rule of thumb: if a consumer might
 want to override it, it belongs in `retro.css` or a utility; if it is a keyframe
 or a component's internal geometry, it belongs in that component's scoped
@@ -456,9 +481,12 @@ Two SSR traps worth knowing, both already handled and commented:
 - **The contract lives in `packages/shared`.** Add a Zod schema there, then use
   it to validate in the API _and_ in SvelteKit form actions. Types are inferred,
   never hand-written twice.
-- **Database rows are not wire types.** When the first table lands, map the
-  Drizzle row (with `Date`s) to the shared Zod shape (ISO strings) in one
-  place inside the route, and never export a row type from the API.
+- **Database rows are not wire types.** Map the Drizzle row to the shared Zod
+  shape in one place, and never export a row type from the API.
+  `apps/api/src/topics/db-topics.ts` is the worked example: the row's `key`
+  becomes the wire `id`, and `active` / `source` / `createdAt` never leave the
+  file. Rows are validated on the way _out_ of a hand-editable table, not
+  trusted.
 - **Env is parsed once.** `apps/api/src/env.ts` validates `process.env` at boot
   and exits with a readable error if something is missing.
 - **A variable belongs to one owner.** If only one app reads it, it goes in that
@@ -665,3 +693,18 @@ Vite proxy would make every socket look like one client). Behind a proxy the
 address comes from `X-Forwarded-For`, which is why `TRUST_PROXY` must match
 the real hop count — too high and a client can forge its address, too low and
 every visitor shares the proxy's.
+
+Changing the subject is capped per room rather than per peer
+(`TOPIC_COOLDOWN_MS`), which is the property that matters: however fast one
+person clicks **change the subject**, the room emits at most one `topic`
+broadcast per cooldown, so nobody can strobe the other person's screen that
+way. A refused change is not counted as an invalid frame — it is well-formed,
+and a laggy client legitimately races the window.
+
+The cooldown guards `next-topic` only. A client that spams `leave` + `join`
+still re-rolls the subject on every refill, because filling a room is a fresh
+pairing and gets a fresh topic by design. That is not a topic hole worth
+plugging: the same loop already tears down the other person's call, restarts
+their clock and rewrites their status line, so anyone willing to do it has
+louder tools than the icebreaker. Rate-limiting room churn is the fix, if it
+ever becomes worth one.

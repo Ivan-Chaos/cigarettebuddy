@@ -1,8 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { CHAT_DURATION_MS, type TimerState } from '@cigbuddy/shared';
+import { CHAT_DURATION_MS, TOPIC_COOLDOWN_MS, type TimerState, type Topic } from '@cigbuddy/shared';
 import { generateRoomId } from './room-id.js';
 
 export const MAX_PEERS = 2;
+
+/**
+ * How many recently shown topics a room remembers. With a few hundred to pick
+ * from and a button people press in bursts, a bare uniform pick repeats often
+ * enough to look broken; this is the whole fix.
+ */
+export const RECENT_TOPICS = 12;
 
 export interface Peer<T> {
   id: string;
@@ -19,10 +26,23 @@ interface Burn {
   votes: Set<string>;
 }
 
+/**
+ * The room's icebreaker. Unlike the burn this belongs to the room rather than
+ * to the pairing, so it survives a peer walking off.
+ */
+interface TopicState {
+  current: Topic;
+  /** When it last changed, for the cooldown. */
+  changedAt: number;
+  /** Ids shown lately, newest first, so a re-roll does not repeat itself. */
+  recent: string[];
+}
+
 interface Room<T> {
   peers: Set<Peer<T>>;
   /** Invariant: non-null exactly when `peers.size === MAX_PEERS`. */
   burn: Burn | null;
+  topic: TopicState | null;
 }
 
 export type JoinResult<T> =
@@ -38,6 +58,10 @@ export type VoteResult =
   | { ok: true; relit: boolean; state: TimerState }
   | { ok: false; code: 'not_in_room' | 'not_burning' };
 
+export type ShuffleResult =
+  | { ok: true; topic: Topic }
+  | { ok: false; code: 'not_in_room' | 'cooling_down' | 'stale' | 'no_topics' };
+
 export interface RoomManagerOptions {
   /** Picks an index in `[0, count)` among the open rooms. Injectable for tests. */
   pick?: (count: number) => number;
@@ -47,6 +71,15 @@ export interface RoomManagerOptions {
   now?: () => number;
   /** Length of one cigarette. */
   durationMs?: number;
+  /**
+   * Supplies icebreakers, skipping the ids it is given. Synchronous and total:
+   * it returns null rather than throwing when there is nothing to pick, which
+   * is what keeps this class free of I/O. Defaults to "no topics at all", so a
+   * manager built without one behaves exactly as it did before topics existed.
+   */
+  pickTopic?: (exclude: readonly string[]) => Topic | null;
+  /** Minimum gap between topic changes in one room. */
+  topicCooldownMs?: number;
 }
 
 /**
@@ -63,12 +96,16 @@ export class RoomManager<T> {
   private readonly newRoomId: () => string;
   private readonly now: () => number;
   private readonly durationMs: number;
+  private readonly pickTopic: (exclude: readonly string[]) => Topic | null;
+  private readonly topicCooldownMs: number;
 
   constructor(options: RoomManagerOptions = {}) {
     this.pick = options.pick ?? ((count) => Math.floor(Math.random() * count));
     this.newRoomId = options.newRoomId ?? generateRoomId;
     this.now = options.now ?? Date.now;
     this.durationMs = options.durationMs ?? CHAT_DURATION_MS;
+    this.pickTopic = options.pickTopic ?? (() => null);
+    this.topicCooldownMs = options.topicCooldownMs ?? TOPIC_COOLDOWN_MS;
   }
 
   join(roomId: string, conn: T, id: string = randomUUID()): JoinResult<T> {
@@ -76,7 +113,7 @@ export class RoomManager<T> {
       return { ok: false, code: 'already_joined' };
     }
 
-    const room = this.rooms.get(roomId) ?? { peers: new Set<Peer<T>>(), burn: null };
+    const room = this.rooms.get(roomId) ?? { peers: new Set<Peer<T>>(), burn: null, topic: null };
     if (room.peers.size >= MAX_PEERS) {
       return { ok: false, code: 'room_full' };
     }
@@ -87,9 +124,16 @@ export class RoomManager<T> {
     this.rooms.set(roomId, room);
     this.byConn.set(conn, peer);
 
+    // A brand-new room gets a subject straight away, so somebody waiting alone
+    // still has something to read.
+    if (room.topic === null) this.assignTopic(room);
+
     // The clock starts the moment the second person turns up.
     if (room.peers.size === MAX_PEERS) {
       room.burn = { deadline: this.now() + this.durationMs, lit: 0, votes: new Set() };
+      // A new pairing deserves a fresh subject, whatever the survivor of the
+      // last one was left staring at.
+      this.assignTopic(room);
     }
 
     return { ok: true, peer, other };
@@ -126,6 +170,9 @@ export class RoomManager<T> {
 
     room.peers.delete(peer);
     room.burn = null;
+    // `room.topic` is deliberately left alone. The symmetry with the burn is
+    // tempting and wrong: the subject belongs to the room, and blanking it
+    // would take the card off the screen of the person now waiting alone.
     const other = firstOf(room.peers);
     if (room.peers.size === 0) this.rooms.delete(peer.roomId);
 
@@ -156,6 +203,47 @@ export class RoomManager<T> {
     }
 
     return { ok: true, relit, state: this.stateOf(burn) };
+  }
+
+  /** The room's current subject, or null when it has none. */
+  topicOf(roomId: string): Topic | null {
+    return this.rooms.get(roomId)?.topic?.current ?? null;
+  }
+
+  /**
+   * A peer asking to change the subject. Honours the room's cooldown, and
+   * ignores a request aimed at a topic that is already gone: two people
+   * clicking at once get one change rather than two, and the second click was
+   * a reaction to something neither of them is still reading.
+   */
+  shuffleTopic(conn: T, afterId?: string): ShuffleResult {
+    const peer = this.byConn.get(conn);
+    if (!peer) return { ok: false, code: 'not_in_room' };
+
+    const room = this.rooms.get(peer.roomId);
+    if (!room) return { ok: false, code: 'not_in_room' };
+
+    const topic = room.topic;
+    if (topic) {
+      if (afterId !== undefined && afterId !== topic.current.id) {
+        return { ok: false, code: 'stale' };
+      }
+      if (this.now() - topic.changedAt < this.topicCooldownMs) {
+        return { ok: false, code: 'cooling_down' };
+      }
+    }
+
+    const next = this.assignTopic(room);
+    return next ? { ok: true, topic: next } : { ok: false, code: 'no_topics' };
+  }
+
+  /**
+   * A re-roll the server decided on: the room filled, or the pair lit another
+   * one. Ignores the cooldown, since nobody clicked anything.
+   */
+  rollTopic(roomId: string): Topic | null {
+    const room = this.rooms.get(roomId);
+    return room ? this.assignTopic(room) : null;
   }
 
   /** Null while the room is not full (or does not exist). */
@@ -202,6 +290,31 @@ export class RoomManager<T> {
 
   roomCount(): number {
     return this.rooms.size;
+  }
+
+  /**
+   * Rolls a new subject for the room, remembering the last few so a re-roll
+   * does not hand back what it just took away. Returns null, leaving the room
+   * as it was, when there is nothing to pick.
+   */
+  private assignTopic(room: Room<T>): Topic | null {
+    const previous = room.topic;
+    const exclude = previous ? [previous.current.id, ...previous.recent] : [];
+    const next = this.pickTopic(exclude);
+    if (!next) return null;
+    // `pickTopic` is asked to skip these, but it is allowed to give up and hand
+    // back anything rather than nothing -- with only a handful of topics left
+    // active, "anything" can be the one already on screen. Treat that as no
+    // change: broadcasting it would tell the other peer "they changed the
+    // subject" over identical text, and kill both buttons for the cooldown.
+    if (previous && next.id === previous.current.id) return null;
+
+    room.topic = {
+      current: next,
+      changedAt: this.now(),
+      recent: previous ? [previous.current.id, ...previous.recent].slice(0, RECENT_TOPICS) : [],
+    };
+    return next;
   }
 
   private stateOf(burn: Burn): TimerState {

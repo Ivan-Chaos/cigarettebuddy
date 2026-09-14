@@ -22,6 +22,20 @@
       "when": 1789321683325,
       "tag": "0002_reports_counters",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789408686003,
+      "tag": "0003_topics",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789414064271,
+      "tag": "0004_topics_source_default",
+      "breakpoints": true
     }
   ]
 }
