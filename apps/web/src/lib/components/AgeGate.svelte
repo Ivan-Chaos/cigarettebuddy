@@ -109,6 +109,7 @@
     aria-describedby="ag-body"
     tabindex="-1"
     onkeydown={onKeydown}
+    data-nosnippet
   >
     <!-- Pure black on pure white rather than the site's ink and paper: this is
          supposed to look like it was printed by a regulator, not designed. -->
@@ -121,11 +122,19 @@
           hold your horses, are you old enough
         </h2>
 
-        <!-- Sentence case, like the body text on a real pack warning. -->
+        <!-- Sentence case, like the body text on a real pack warning.
+
+             Worded so that no clipped excerpt can invert its meaning. Google
+             once stitched the old sentence into a search snippet as
+             "cigarettes and chatting with strangers, for people under 18
+             years old" -- the exact opposite of what it said. Every clause
+             here reads as 18+ on its own, and `data-nosnippet` on the dialog
+             keeps the gate out of snippets altogether. -->
         <p id="ag-body" class="text-[0.9375rem] leading-snug text-black sm:text-base">
-          this website is about cigarettes and chatting with strangers, none of these topics are for
-          people under 18 years old. If you&rsquo;re one of those, with all due respect, come back
-          when you&rsquo;re old enough, or don&rsquo;t, idc but you shouldn&rsquo;t be here
+          this website is about cigarettes and chatting with strangers. It is for adults only: you
+          must be 18 or older to be here. If you&rsquo;re younger than that, with all due respect,
+          come back when you&rsquo;re old enough, or don&rsquo;t, idc but you shouldn&rsquo;t be
+          here
         </p>
 
         <div class="mt-1 flex flex-col gap-3 sm:flex-row">

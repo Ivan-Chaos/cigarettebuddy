@@ -2,7 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="%sveltekit.assets%/favicon.svg" />
+    <!-- Google Search wants a favicon that is a multiple of 48px and also
+         tries /favicon.ico at the site root; an SVG on its own was showing up
+         as the generic globe. The PNG/ICO copies are rendered from
+         favicon.svg (see the sizes in static/). -->
+    <link rel="icon" href="%sveltekit.assets%/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="%sveltekit.assets%/favicon-96.png" type="image/png" sizes="96x96" />
+    <link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
+    <link rel="manifest" href="%sveltekit.assets%/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!--
       Runs before anything paints, so a visitor who has already answered the

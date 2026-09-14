@@ -11,6 +11,35 @@
 
   const inRoom = $derived(page.url.pathname.startsWith('/room'));
 
+  const appName = env.PUBLIC_APP_NAME ?? 'CigaretteBuddy';
+  const title = `${appName} | a smoke break with a stranger`;
+  // "18+" is stated here on purpose: it is the one line Google is most likely
+  // to quote, and it has to be unambiguous about who the site is for.
+  const description = `${appName}: video chat with one random stranger who is also outside on a smoke break. Adults 18+ only. No account, nothing saved, two people to a room.`;
+  // `page.url.origin` is the ORIGIN adapter-node is started with in production,
+  // so this is the public https URL rather than the proxied 127.0.0.1 one.
+  const canonical = $derived(`${page.url.origin}${page.url.pathname}`);
+  const schema = $derived({
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: appName,
+    url: page.url.origin,
+    description,
+    publisher: {
+      '@type': 'Organization',
+      name: appName,
+      url: page.url.origin,
+      logo: `${page.url.origin}/icon-512.png`,
+    },
+  });
+  // Built as a string because a literal <script> tag in the template trips
+  // both the Svelte parser and eslint. The closing tag is split for the same
+  // reason, and "<" is escaped so nothing in the JSON can close the tag early.
+  const schemaTag = $derived(
+    `<script type="application/ld+json">${JSON.stringify(schema).replaceAll('<', '\\u003c')}<` +
+      '/script>',
+  );
+
   /* The landing page composes its own full-bleed bands, so it opts out of the
      bordered sheet and supplies one itself for the sections not yet converted.
      Keyed off the route rather than the path, and gated on `page.error`: when
@@ -39,12 +68,35 @@
 </script>
 
 <svelte:head>
-  <title>{env.PUBLIC_APP_NAME ?? 'cigarettebuddy'} | a smoke break with a stranger</title>
-  <meta
-    name="description"
-    content="Video chat with one random stranger who is also outside on a break. No account, nothing saved, two people to a room."
-  />
+  <title>{title}</title>
+  <!-- Names the brand and the subject outright. The previous description
+       mentioned neither cigarettes nor smoking, so Google judged it a poor
+       match for brand searches and stitched its own snippet out of page text
+       (header button, hero, and a clipped line from the 18+ gate). -->
+  <meta name="description" content={description} />
+  <link rel="canonical" href={canonical} />
   <meta name="theme-color" content="#f2eada" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content={appName} />
+  <meta property="og:title" content={title} />
+  <meta property="og:description" content={description} />
+  <meta property="og:url" content={canonical} />
+  <meta property="og:image" content="{page.url.origin}/icon-512.png" />
+  <meta property="og:image:width" content="512" />
+  <meta property="og:image:height" content="512" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content={title} />
+  <meta name="twitter:description" content={description} />
+  <meta name="twitter:image" content="{page.url.origin}/icon-512.png" />
+
+  <!-- Tells Google which image is the brand's logo. It is separate from the
+       favicon (which comes from the <link rel="icon"> tags in app.html), but
+       it is what brand-name results and knowledge panels draw on. -->
+  <!-- Safe: the JSON is built from our own constants and the request origin,
+       with "<" escaped above. -->
+  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+  {@html schemaTag}
 </svelte:head>
 
 <SiteShell wide={inRoom} framed={!isLanding}>
