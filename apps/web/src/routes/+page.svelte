@@ -347,7 +347,7 @@
 
     <!-- Paper under a panel band: a half-tone darker, so the phone reads as
          lying on something rather than floating on the band itself. -->
-    <div class="bg-paper px-4 py-8">
+    <div class="bg-olive-600 px-4 py-8">
       <div class="rt-raise mx-auto w-full max-w-[19rem] border border-ink bg-putty px-3 pt-3 pb-4">
         <!-- The earpiece slot and the home button are the only round things on
              this site, and they stay round: they are drawn hardware, not UI.
@@ -360,7 +360,7 @@
             class="rt-pixel flex items-center justify-between bg-ink px-1.5 py-1 text-[0.5rem] text-glow"
           >
             <span>CIGBUDDY</span>
-            <span>04:12</span>
+            <span>04:20</span>
           </div>
 
           <!-- Both gifs are heavy, 1.1 MB and 2.1 MB, and this band sits a long
