@@ -6,6 +6,7 @@
   import MicOffIcon from '@lucide/svelte/icons/mic-off';
   import VideoIcon from '@lucide/svelte/icons/video';
   import VideoOffIcon from '@lucide/svelte/icons/video-off';
+  import FlagIcon from '@lucide/svelte/icons/flag';
   import { CHAT_DURATION_MS, type ReportReason } from '@cigbuddy/shared';
   import ChatPanel from '$lib/components/ChatPanel.svelte';
   import DeviceControl from '$lib/components/DeviceControl.svelte';
@@ -110,16 +111,27 @@
 </script>
 
 <div class="flex flex-col gap-4">
-  <!-- The way out lives in the button row with the other controls; a second
-       small Leave up here only split attention between the two. -->
+  <!-- Both ways out sit together up here, away from the row of things you do
+       while staying. The flag marks the one that also tells us about them. -->
   <Panel dense>
-    <h1 class="text-xl">
-      {#if room.roomId}
-        Balcony # <code class="border border-ink bg-putty px-1 py-0.5">{room.roomId}</code>
-      {:else}
-        Finding you a room
-      {/if}
-    </h1>
+    <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <h1 class="text-xl">
+        {#if room.roomId}
+          Balcony # <code class="border border-ink bg-putty px-1 py-0.5">{room.roomId}</code>
+        {:else}
+          Finding you a room
+        {/if}
+      </h1>
+      <div class="flex items-center gap-2">
+        <Button size="sm" onclick={leave}>Leave</Button>
+        {#if room.status !== 'expired'}
+          <Button variant="danger-solid" size="sm" onclick={() => (reportOpen = true)}>
+            <FlagIcon aria-hidden="true" />
+            Leave and report
+          </Button>
+        {/if}
+      </div>
+    </div>
   </Panel>
 
   <StatusStrip
@@ -261,10 +273,6 @@
           {/if}
           {#if room.status !== 'expired'}
             <Button onclick={() => void room.next()}>Find next buddy</Button>
-            <Button onclick={leave}>Leave</Button>
-            <Button variant="danger-solid" onclick={() => (reportOpen = true)}>
-              Leave and report
-            </Button>
           {/if}
         </div>
       </section>
