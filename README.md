@@ -555,7 +555,85 @@ docker compose -f docker-compose.yml -f docker-compose.nginx.yml up -d --build
   `turn.example.com`, and use that in `TURN_URLS` and coturn's `realm`.
 - WebSockets are on by default on every Cloudflare plan; nothing to enable.
 
+### Continuous deployment
+
+`.github/workflows/ci.yml` runs on every push to `main`:
+
+```
+verify ──▶ build api + web images ──▶ deploy over SSH
+```
+
+- **verify** — `pnpm lint`, `format:check`, `check`, `test`, `build`. Pull
+  requests stop here; nothing is published or deployed from a branch.
+- **images** — both Dockerfiles are built and pushed to
+  `ghcr.io/<owner>/cigarettebuddy-api` and `-web`, tagged with the commit SHA
+  and `latest`. Buildx layer cache is shared between runs, so an unchanged
+  dependency tree is never reinstalled.
+- **deploy** — SSHes into the VPS, fast-forwards the checkout to the deployed
+  commit and runs `scripts/deploy.sh`, which pulls the SHA-tagged images and
+  brings the stack up with `--wait`. A failed migration or a container that
+  never turns healthy fails the job and prints the logs.
+
+The server builds nothing: `docker-compose.registry.yml` drops the `build`
+sections, so a missing image is an error instead of a silent local compile. The
+compose files, the nginx server block and `deploy.sh` itself still ship from
+git — only application code comes from the images.
+
+`deploy.sh` defaults to the **nginx** overlay, which is what the current server
+runs. On a host using the bundled Caddy instead, pass
+`PROD_OVERLAY=docker-compose.prod.yml` — the two must not be mixed, since
+Caddy would fight nginx for ports 80 and 443.
+
+#### What the server needs
+
+1. The clone from [First deploy](#first-deploy), with the production `.env`
+   beside it. CI runs `git reset --hard` on it, so it must carry no local
+   commits or edits — they are discarded.
+2. A user in the `docker` group whose `~/.ssh/authorized_keys` holds the
+   deploy key.
+
+Nothing else. The server logs into GHCR with the workflow's own token for the
+length of the run and out again afterwards, so no registry credential is stored
+on it.
+
+#### Repository secrets
+
+Settings → Secrets and variables → Actions:
+
+| Secret            | Value                                                          |
+| ----------------- | -------------------------------------------------------------- |
+| `VPS_HOST`        | Hostname or IP of the server                                   |
+| `VPS_USER`        | SSH user (in the `docker` group)                               |
+| `VPS_SSH_KEY`     | Private half of a deploy-only key, whole PEM including newline |
+| `VPS_KNOWN_HOSTS` | `ssh-keyscan -H <host>` output                                 |
+| `VPS_PATH`        | Optional — the checkout's path, default `~/cigarettebuddy`     |
+
+```bash
+ssh-keygen -t ed25519 -C cigbuddy-deploy -f ~/.ssh/cigbuddy-deploy -N ''
+ssh-copy-id -i ~/.ssh/cigbuddy-deploy.pub <user>@<host>   # public half → server
+ssh-keyscan -H <host>                                     # → VPS_KNOWN_HOSTS
+```
+
+`VPS_KNOWN_HOSTS` is what makes the deploy refuse an impostor server; don't
+replace it with `StrictHostKeyChecking=no`.
+
+#### Deploying or rolling back by hand
+
+`scripts/deploy.sh` is the same command CI runs, so any published tag can be
+put back on without a rebuild:
+
+```bash
+IMAGE_TAG=<commit sha> bash scripts/deploy.sh      # on the server
+```
+
+Pair it with `git checkout <commit sha>` when the compose files or the
+`Caddyfile` also changed between the two commits.
+
 ### Updating
+
+Pushing to `main` deploys — see [Continuous
+deployment](#continuous-deployment). To update the server by hand instead, with
+images built on the box:
 
 ```bash
 git fetch --tags && git checkout v1.x.y

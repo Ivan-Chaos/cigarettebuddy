@@ -1,0 +1,23 @@
+# Registry overlay: run the images CI built instead of building on the host.
+#
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.prod.yml \
+#                  -f docker-compose.registry.yml pull
+#
+# `scripts/deploy.sh` is the supported way to use it — it fills in API_IMAGE and
+# WEB_IMAGE from IMAGE_PREFIX/IMAGE_TAG. Dropping the `build` sections is what
+# guarantees the VPS can never quietly compile its own version of a service:
+# without an image to pull, the command fails instead.
+
+services:
+  migrate:
+    build: !reset null
+    image: ${API_IMAGE:?set API_IMAGE (use scripts/deploy.sh)}
+
+  api:
+    build: !reset null
+    image: ${API_IMAGE:?set API_IMAGE (use scripts/deploy.sh)}
+
+  web:
+    build: !reset null
+    image: ${WEB_IMAGE:?set WEB_IMAGE (use scripts/deploy.sh)}
